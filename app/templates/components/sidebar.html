@@ -1,0 +1,429 @@
+<!-- Sidebar Header -->
+<div class="p-4 border-b border-base-300">
+    <button class="btn btn-primary btn-block" onclick="newChat()">
+        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+        </svg>
+        New Chat
+    </button>
+</div>
+
+<!-- Search -->
+<div class="p-4 border-b border-base-300">
+    <div class="form-control">
+        <div class="input-group">
+            <input type="text" 
+                   placeholder="Search chats..." 
+                   class="input input-bordered flex-1 input-sm"
+                   hx-get="/chat/search"
+                   hx-trigger="input changed delay:300ms"
+                   hx-target="#chat-list"
+                   hx-include="[name='folder']">
+            <button class="btn btn-square btn-sm">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Model Selection -->
+<div class="p-4 border-b border-base-300">
+    <div class="flex items-center justify-between mb-2">
+        <h3 class="font-semibold text-sm uppercase tracking-wide">Models</h3>
+        <button onclick="showDownloadModal()" class="btn btn-ghost btn-xs">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8l-8 8-8-8"></path>
+            </svg>
+        </button>
+    </div>
+    
+    <select class="select select-bordered select-sm w-full" id="model-select" onchange="setCurrentModel(this.value)">
+        <option disabled selected>Loading models...</option>
+    </select>
+    
+    <!-- Model Info -->
+    <div class="mt-2 text-xs opacity-70" id="model-info">
+        Select a model to see details
+    </div>
+    
+    <!-- Model Actions -->
+    <div id="model-actions" class="mt-2 hidden">
+        <div class="flex gap-1">
+            <button id="load-model-btn" class="btn btn-xs btn-success flex-1" onclick="loadCurrentModel()">Load</button>
+            <button id="unload-model-btn" class="btn btn-xs btn-warning flex-1" onclick="unloadCurrentModel()">Unload</button>
+        </div>
+    </div>
+</div>
+
+<!-- Download Modal -->
+<div id="download-modal" class="hidden p-4 border-b border-base-300 bg-base-300">
+    <h4 class="font-semibold text-sm mb-3">Download Model</h4>
+    
+    <!-- Popular Models -->
+    <div class="mb-3">
+        <label class="label">
+            <span class="label-text text-xs">Quick Download</span>
+        </label>
+        <div class="grid grid-cols-1 gap-1">
+            <button class="btn btn-outline btn-xs" onclick="downloadModel('microsoft/DialoGPT-medium')">
+                DialoGPT Medium (1.5GB)
+            </button>
+            <button class="btn btn-outline btn-xs" onclick="downloadModel('TinyLlama/TinyLlama-1.1B-Chat-v1.0')">
+                TinyLlama 1.1B (2.2GB)
+            </button>
+            <button class="btn btn-outline btn-xs" onclick="downloadModel('TheBloke/Llama-2-7B-Chat-GGML')">
+                Llama-2 7B Chat (4GB)
+            </button>
+        </div>
+    </div>
+    
+    <!-- Custom Model URL -->
+    <div class="mb-3">
+        <label class="label">
+            <span class="label-text text-xs">Custom Model</span>
+        </label>
+        <div class="input-group">
+            <input type="text" 
+                   placeholder="HuggingFace model name..." 
+                   class="input input-bordered input-xs flex-1"
+                   id="custom-model-input">
+            <button class="btn btn-xs" onclick="downloadCustomModel()">Download</button>
+        </div>
+    </div>
+    
+    <!-- Download Progress -->
+    <div id="download-progress" class="hidden">
+        <div class="text-xs mb-1">Downloading...</div>
+        <progress class="progress progress-primary w-full" value="0" max="100"></progress>
+    </div>
+    
+    <button class="btn btn-ghost btn-xs w-full" onclick="hideDownloadModal()">Close</button>
+</div>
+
+<!-- Folder Management -->
+<div class="p-4 border-b border-base-300" x-data="{ showNewFolder: false, newFolderName: '' }">
+    <div class="flex items-center justify-between mb-2">
+        <h3 class="font-semibold text-sm uppercase tracking-wide">Folders</h3>
+        <button @click="showNewFolder = !showNewFolder" class="btn btn-ghost btn-xs">
+            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6"></path>
+            </svg>
+        </button>
+    </div>
+    
+    <!-- New Folder Form -->
+    <div x-show="showNewFolder" x-transition class="mb-2">
+        <form hx-post="/chat/folder/create" hx-target="#folder-list" hx-swap="beforeend">
+            <div class="input-group">
+                <input type="text" 
+                       name="name" 
+                       x-model="newFolderName"
+                       placeholder="Folder name..." 
+                       class="input input-bordered input-xs flex-1"
+                       required>
+                <button type="submit" class="btn btn-xs">
+                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                </button>
+            </div>
+        </form>
+    </div>
+    
+    <!-- Folder List -->
+    <div id="folder-list" class="space-y-1">
+        <button class="btn btn-ghost btn-sm justify-start w-full active"
+                hx-get="/chat/list?folder="
+                hx-target="#chat-list"
+                hx-on:click="setActiveFolder(this)">
+            <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"></path>
+            </svg>
+            All Chats
+        </button>
+        
+        <!-- Dynamic folders will be loaded here -->
+        <div hx-get="/chat/folders" hx-trigger="load" hx-swap="innerHTML"></div>
+    </div>
+</div>
+
+<!-- Chat History -->
+<div class="flex-1 overflow-y-auto">
+    <div class="p-4">
+        <h3 class="font-semibold text-sm uppercase tracking-wide mb-2">Recent Chats</h3>
+        <div id="chat-list" 
+             hx-get="/chat/list" 
+             hx-trigger="load"
+             hx-swap="innerHTML"
+             class="space-y-1">
+            <!-- Chat items will be loaded here -->
+        </div>
+    </div>
+</div>
+
+<!-- Settings Panel -->
+<div class="p-4 border-t border-base-300">
+    <div class="dropdown dropdown-top dropdown-end w-full">
+        <div tabindex="0" role="button" class="btn btn-ghost btn-sm w-full justify-start">
+            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+            </svg>
+            Settings
+        </div>
+        <div tabindex="0" class="dropdown-content z-[1] menu p-2 shadow bg-base-100 rounded-box w-80">
+            <div class="p-4">
+                <h4 class="font-semibold mb-3">Chat Settings</h4>
+                
+                <!-- Temperature -->
+                <div class="form-control mb-3">
+                    <label class="label">
+                        <span class="label-text">Temperature</span>
+                        <span class="label-text-alt" id="temp-value">0.7</span>
+                    </label>
+                    <input type="range" min="0" max="2" step="0.1" value="0.7" 
+                           class="range range-sm" id="temperature-range">
+                </div>
+                
+                <!-- Max Tokens -->
+                <div class="form-control mb-3">
+                    <label class="label">
+                        <span class="label-text">Max Tokens</span>
+                    </label>
+                    <input type="number" value="2048" min="1" max="8192"
+                           class="input input-bordered input-sm" id="max-tokens">
+                </div>
+                
+                <!-- System Prompt -->
+                <div class="form-control mb-3">
+                    <label class="label">
+                        <span class="label-text">System Prompt</span>
+                    </label>
+                    <textarea class="textarea textarea-bordered textarea-sm" 
+                              placeholder="You are a helpful assistant..."
+                              id="system-prompt" rows="3"></textarea>
+                </div>
+                
+                <!-- RAG Toggle -->
+                <div class="form-control mb-3">
+                    <label class="cursor-pointer label justify-start">
+                        <input type="checkbox" class="toggle toggle-sm mr-2" id="rag-enabled">
+                        <span class="label-text">Enable RAG</span>
+                    </label>
+                </div>
+                
+                <!-- Voice Chat Toggle -->
+                <div class="form-control">
+                    <label class="cursor-pointer label justify-start">
+                        <input type="checkbox" class="toggle toggle-sm mr-2" id="voice-enabled">
+                        <span class="label-text">Voice Chat</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let currentModelName = '';
+
+function setActiveFolder(element) {
+    // Remove active class from all folder buttons
+    document.querySelectorAll('#folder-list button').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    // Add active class to clicked button
+    element.classList.add('active');
+}
+
+function newChat() {
+    // Create new chat
+    htmx.ajax('POST', '/chat/create', {
+        target: '#main-content',
+        swap: 'innerHTML'
+    });
+}
+
+function setCurrentModel(modelName) {
+    currentModelName = modelName;
+    
+    // Update current model and load model info
+    fetch(`/api/models/${modelName}/info`)
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('model-info').textContent = 
+                `${data.type} • ${data.size} • ${data.context_length} tokens`;
+            
+            // Show model actions
+            const actions = document.getElementById('model-actions');
+            const loadBtn = document.getElementById('load-model-btn');
+            const unloadBtn = document.getElementById('unload-model-btn');
+            
+            actions.classList.remove('hidden');
+            
+            if (data.loaded) {
+                loadBtn.classList.add('hidden');
+                unloadBtn.classList.remove('hidden');
+            } else {
+                loadBtn.classList.remove('hidden');
+                unloadBtn.classList.add('hidden');
+            }
+            
+            // Store in localStorage
+            localStorage.setItem('currentModel', modelName);
+        })
+        .catch(error => {
+            console.error('Error getting model info:', error);
+        });
+}
+
+function loadCurrentModel() {
+    if (!currentModelName) return;
+    
+    const loadBtn = document.getElementById('load-model-btn');
+    loadBtn.disabled = true;
+    loadBtn.textContent = 'Loading...';
+    
+    fetch(`/api/models/${currentModelName}/load`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            setCurrentModel(currentModelName); // Refresh UI
+            window.llmCockpit?.showToast(data.message, 'success');
+        } else {
+            window.llmCockpit?.showToast(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error loading model:', error);
+        window.llmCockpit?.showToast('Failed to load model', 'error');
+    })
+    .finally(() => {
+        loadBtn.disabled = false;
+        loadBtn.textContent = 'Load';
+    });
+}
+
+function unloadCurrentModel() {
+    if (!currentModelName) return;
+    
+    const unloadBtn = document.getElementById('unload-model-btn');
+    unloadBtn.disabled = true;
+    unloadBtn.textContent = 'Unloading...';
+    
+    fetch(`/api/models/${currentModelName}/unload`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            setCurrentModel(currentModelName); // Refresh UI
+            window.llmCockpit?.showToast(data.message, 'success');
+        } else {
+            window.llmCockpit?.showToast(data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error unloading model:', error);
+        window.llmCockpit?.showToast('Failed to unload model', 'error');
+    })
+    .finally(() => {
+        unloadBtn.disabled = false;
+        unloadBtn.textContent = 'Unload';
+    });
+}
+
+function showDownloadModal() {
+    document.getElementById('download-modal').classList.remove('hidden');
+}
+
+function hideDownloadModal() {
+    document.getElementById('download-modal').classList.add('hidden');
+}
+
+function downloadModel(modelName) {
+    const progress = document.getElementById('download-progress');
+    progress.classList.remove('hidden');
+    
+    window.llmCockpit?.showToast(`Starting download of ${modelName}...`, 'info');
+    
+    // Call the real download API
+    fetch('/api/models/download', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            model_name: modelName
+        })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            window.llmCockpit?.showToast(data.message, 'success');
+            
+            // Refresh models list after download starts
+            setTimeout(() => {
+                location.reload(); // Refresh page to reload models
+            }, 2000);
+        } else {
+            window.llmCockpit?.showToast(data.error || 'Download failed', 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Download error:', error);
+        window.llmCockpit?.showToast('Download failed: ' + error.message, 'error');
+    })
+    .finally(() => {
+        progress.classList.add('hidden');
+    });
+}
+
+function downloadCustomModel() {
+    const input = document.getElementById('custom-model-input');
+    const modelName = input.value.trim();
+    
+    if (!modelName) {
+        window.llmCockpit?.showToast('Please enter a model name', 'error');
+        return;
+    }
+    
+    downloadModel(modelName);
+    input.value = '';
+}
+
+// Load models on page load
+document.addEventListener('DOMContentLoaded', function() {
+    fetch('/api/models')
+        .then(response => response.json())
+        .then(models => {
+            const select = document.getElementById('model-select');
+            
+            if (models.length === 0) {
+                select.innerHTML = '<option disabled selected>No models available - Download one above</option>';
+                return;
+            }
+            
+            select.innerHTML = '<option disabled selected>Select a model...</option>';
+            models.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model.name;
+                option.textContent = model.display_name || model.name;
+                if (model.active) {
+                    option.selected = true;
+                    setCurrentModel(model.name);
+                }
+                select.appendChild(option);
+            });
+        })
+        .catch(error => {
+            console.error('Error loading models:', error);
+            const select = document.getElementById('model-select');
+            select.innerHTML = '<option disabled selected>Error loading models</option>';
+        });
+});
+</script> 

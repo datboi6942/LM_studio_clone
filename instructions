@@ -1,0 +1,330 @@
+0. Core Goals & Stretch Goals
+Tier	Must-haves	Nice-to-haves (stretch)
+Parity	• Run GGUF / Safetensors on CPU + GPU
+• Auto-download/convert from HF
+• Chat UI with folders, markdown, math, code, themes
+• OpenAI-compatible REST + SSE
+• Serve on LAN
+• RAG with local docs	Already beyond LM Studio: function-calling, tool-use, embeddings as a service, community presets 
+LM Studio
+LM Studio
+Extra sauce	• Multi-model hot-swap & auto-batching (vLLM)
+• Whisper STT + Coqui-TTS voice chat
+• Real-time GPU VRAM dashboard
+• Plug-in system (Python entry-points)
+• Agent-orchestration playground (AutoGen-style)
+• Persistent vector DB (Chroma) with inline citations
+• Graph view of conversation memory	
+
+1. Tech-stack Overview
+Layer	Choice	Rationale
+Inference engines	llama-cpp-python (for GGUF, CPU-only fallback)
+vllm (for GPU, auto-batch & paged-KV)	Covers 99 % of open models + gives streaming delta
+Back-end	Flask 3.x + Flask-SocketIO (WebSocket token push)
+Gunicorn (sync API) + Uvicorn/Hypercorn (async SSE)	Dead-simple and battle-tested
+Task queue	Celery + Redis	Offload RAG indexing, long-running jobs
+Vector store	Chroma (or Milvus if you’re fancy)	Pure-Python, persistent to disk
+Front-end	Tailwind + HTMX + Alpine.js	Keep it light; no React build hell
+DB	SQLite for user/chat/meta; Redis for ephemeral	Zero-config dev; upgrade later
+Auth	Flask-Login + argon2 hash	Optional SSO via Authentik/OIDC
+Hardware API	pynvml for VRAM / temps	sexy real-time charts
+
+2. File-tree Skeleton
+text
+Copy
+Edit
+llm_cockpit/
+├─ app/
+│  ├─ __init__.py          # Factory
+│  ├─ config.py
+│  ├─ models/              # inference back-ends
+│  │   ├─ base.py
+│  │   ├─ llama_cpp.py
+│  │   └─ vllm.py
+│  ├─ routes/
+│  │   ├─ api.py           # /api/*
+│  │   ├─ chat.py          # web UI
+│  │   └─ admin.py
+│  ├─ services/
+│  │   ├─ rag.py
+│  │   ├─ embeddings.py
+│  │   ├─ doc_ingest.py
+│  │   └─ voice.py
+│  ├─ static/
+│  └─ templates/
+├─ celery_worker.py
+├─ download_model.py       # CLI helper
+├─ requirements.txt
+└─ gunicorn_conf.py
+3. Environment Setup
+bash
+Copy
+Edit
+# 1.  System deps
+sudo apt install python3.12-venv build-essential cmake git redis-server
+
+# 2.  CUDA 12.4 (if NVIDIA) + cuBLAS, or skip for CPU
+
+# 3.  Project
+python3 -m venv .venv && source .venv/bin/activate
+pip install --upgrade pip wheel
+pip install -r requirements.txt
+requirements.txt (trimmed):
+
+text
+Copy
+Edit
+flask==3.*
+flask-socketio==5.*
+transformers==0.20.*
+accelerate==0.30.*
+llama-cpp-python[server]==0.2.*
+vllm==0.4.*
+huggingface-hub==0.23.*
+sentence_transformers==3.*
+chroma-hnswlib==0.5.*
+celery==5.*
+redis==5.*
+pynvml==11.*
+python-dotenv
+Compile llama.cpp with GPU offload if desired:
+
+bash
+Copy
+Edit
+pip install ninja
+CMAKE_ARGS="-DLLAMA_CUDA=on -DLLAMA_CUBLAS=on" pip install --no-binary :all: llama-cpp-python
+4. Model Management
+4.1 Discovery & Download
+python
+Copy
+Edit
+# download_model.py
+from huggingface_hub import snapshot_download
+import argparse, subprocess, shutil, os
+
+def dl(repo, revision="main", quant="Q4_K_M"):
+    path = snapshot_download(repo_id=repo,
+                             revision=revision,
+                             allow_patterns=["*.gguf","*.safetensors"],
+                             token=os.getenv("HF_TOKEN"))
+    # Auto-convert safetensors → GGUF if needed
+    if not any(p.endswith(".gguf") for p in os.listdir(path)):
+        subprocess.run(["python", "-m", "llama_cpp.convert",
+                        "--outtype", "q4", "--outfile",
+                        f"{repo.split('/')[-1]}-{quant}.gguf", path])
+    print("Done →", path)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("repo")
+    args = parser.parse_args()
+    dl(args.repo)
+4.2 Config YAML
+yaml
+Copy
+Edit
+# app/config_models.yaml
+deepseek-llm-67b:
+  path: /models/deepseek/gguf
+  engine: vllm
+  gpu_layers: 48
+  max_total_tokens: 4096
+qwen2-7b-instruct:
+  path: /models/qwen2
+  engine: llama_cpp
+  n_gpu_layers: 35
+  rope_freq_base: 20000
+Load at boot:
+
+python
+Copy
+Edit
+def load_registry():
+    cfg = yaml.safe_load(open("app/config_models.yaml"))
+    registry = {}
+    for name, p in cfg.items():
+        cls = LlamaCppRunner if p['engine']=="llama_cpp" else VllmRunner
+        registry[name] = cls(**p)
+    return registry
+5. Chat API (OpenAI-flavored)
+python
+Copy
+Edit
+@bp_api.route("/v1/chat/completions", methods=["POST"])
+def chat_completion():
+    data = request.json
+    model = data["model"]
+    messages = data["messages"]
+    stream = data.get("stream", False)
+    for delta in registry[model].chat(messages, stream=stream):
+        if stream:
+            yield make_sse(delta)
+    return jsonify(delta_last)
+SSE helper (make_sse) builds text/event-stream frames so the front-end can consume incremental tokens.
+
+6. Front-end Highlights
+6.1 Live Token Stream
+html
+Copy
+Edit
+<script>
+const evtSrc = new EventSource("/api/stream?id={{chat_id}}");
+evtSrc.onmessage = (e) => {
+    const data = JSON.parse(e.data);
+    appendToken(data.delta);
+};
+</script>
+appendToken() writes into a <pre> while Prism.js auto-highlights code fences.
+
+6.2 Foldered Chats & Search
+Chat metadata stored in chat table: id, user_id, title, folder, created_at.
+
+HTMX swaps list via /chat/sidebar?folder=X.
+
+6.3 Themes
+Tailwind’s data-theme attribute + DaisyUI; expose an options modal (dark, light, system, sepia). That mirrors LM Studio 0.3’s theming 
+LM Studio
+.
+
+7. RAG Pipeline
+Ingest: doc_ingest.py chunks with tiktoken at 1 K tokens; stores embeddings via sentence-transformers (“all-MiniLM-L6-v2” default) into Chroma, keying source path + chunk idx.
+
+Query: Top-k cosine search (k=6).
+
+Assemble: Stream final prompt to model:
+
+text
+Copy
+Edit
+### System
+Answer with citations like [^1].
+
+### Context
+{docs}
+
+### Question
+{user_question}
+Post-process: Regex [^\d] into footnotes, link back to chunks.
+
+LM Studio’s built-in “chat with documents” is naïve; our chunk-footnote loop is smarter. 😎
+
+8. Function Calling & Tool-Use
+Wrap Python callables and export JSON schema:
+
+python
+Copy
+Edit
+def weather(city:str) -> dict:
+    """Return Celsius forecast"""
+    ...
+
+registry.tools.register(weather)
+
+@bp_api.route("/v1/tools", methods=["GET"])
+def list_tools():
+    return jsonify(registry.tools.schemas())
+When model replies with {"tool":"weather", "arguments":{...}} the server executes, streams result back. (Same dance as LM Studio 0.3.6 beta) 
+LM Studio
+.
+
+9. Voice Chat (optional flex)
+STT: faster-whisper transcode mic → text.
+
+TTS: tts library with --model_path tts_models/en/vctk/vits.
+
+Send/receive via WebSocket binary frames & HTML Audio.
+
+10. GPU Telemetry
+python
+Copy
+Edit
+import pynvml, time, socketio
+nvml = pynvml.nvmlInit()
+while True:
+    h = pynvml.nvmlDeviceGetHandleByIndex(0)
+    info = {
+        "vram": pynvml.nvmlDeviceGetMemoryInfo(h).used // 2**20,
+        "temp": pynvml.nvmlDeviceGetTemperature(h, 0)
+    }
+    socketio.emit("gpu", info, namespace="/metrics")
+    time.sleep(1)
+Front-end draws live Gauge.js charts.
+
+11. Celery Jobs
+celery_worker.py:
+
+python
+Copy
+Edit
+celery = Celery(broker="redis://localhost:6379/0")
+@celery.task
+def embed_folder(path):
+    for file in Path(path).rglob("*"):
+        ingest(file)
+Kickoff from UI; progress bars via SocketIO.
+
+12. Security Notes (because your HTB creds ≠ public)
+Default bind 127.0.0.1; explicit flag --public to expose.
+
+JWT auth for API tokens (OpenAI-style Authorization: Bearer sk-...).
+
+Rate-limit with Flask-Limiter.
+
+Disable file uploads unless RAG is enabled. Validate MIME & 20 MB cap.
+
+13. Packaging & Deployment
+bash
+Copy
+Edit
+# Build
+pip install pyinstaller
+pyinstaller -F -n llm_cockpit run.py
+
+# Production (GPU box)
+gunicorn "app:create_app()" \
+        -k eventlet -w 1 -b 0.0.0.0:8000 \
+        --timeout 900 --log-level info
+Systemd unit to auto-restart on crash.
+
+14. Roadmap for “even more features”
+Agent Arena – spin up multiple models as “characters” and let them solve tasks.
+
+Workflow builder – draw flowcharts, export to LangChain JSON.
+
+Mobile companion – PWA wrapper + local-net websocket.
+
+Community presets hub – share model + prompt combos (mirror LM Studio 0.3.16) 
+LM Studio
+.
+
+Vision input – integrate llava.cpp; drag-and-drop images.
+
+Fine-tune UI – fire off LoRA jobs to Colab/A100 with a click.
+
+15. Quick “Hello, It Works” Smoke Test
+bash
+Copy
+Edit
+source .venv/bin/activate
+export FLASK_APP=app:create_app
+flask --app app run --debug
+# In new shell
+curl -N -X POST http://127.0.0.1:5000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d @- <<'EOF'
+{
+ "model": "qwen2-7b-instruct",
+ "stream": true,
+ "messages":[
+   {"role":"system","content":"You are a snarky assistant."},
+   {"role":"user","content":"Why are LLMs allergic to 32-bit floats?"}
+ ]
+}
+EOF
+If you see tokens drip in JSON chunks, you’re golden.
+
+Final Pep-talk
+You now have the scaffolding to spin up a local LLM command-center that dunks on LM Studio, Ollama, and their cousins. The pieces are modular; rip out what you hate, over-engineer what you love. And because it’s Flask, you can tack on whatever zero-day-adjacent feature you dream up at 3 AM.
+
+Go ship it, cyber-wizard. 🪄

@@ -1,0 +1,269 @@
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    @apply bg-base-300;
+}
+
+::-webkit-scrollbar-thumb {
+    @apply bg-primary rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    @apply bg-primary-focus;
+}
+
+/* Chat message animations */
+.chat {
+    animation: fadeInUp 0.3s ease-out;
+}
+
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Code block styling */
+pre {
+    @apply bg-base-300 rounded-lg p-4 overflow-x-auto;
+    max-width: 100%;
+}
+
+code {
+    @apply bg-base-300 rounded px-1 py-0.5 text-sm;
+}
+
+pre code {
+    @apply bg-transparent p-0;
+}
+
+/* Math rendering */
+.MathJax {
+    font-size: 1em !important;
+}
+
+/* Message content prose styling */
+.prose {
+    color: inherit;
+}
+
+.prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6 {
+    @apply text-base-content;
+}
+
+.prose strong {
+    @apply text-base-content font-bold;
+}
+
+.prose em {
+    @apply text-base-content italic;
+}
+
+.prose ul {
+    @apply list-disc list-inside;
+}
+
+.prose ol {
+    @apply list-decimal list-inside;
+}
+
+.prose blockquote {
+    @apply border-l-4 border-primary pl-4 italic opacity-80;
+}
+
+.prose table {
+    @apply table table-compact w-full;
+}
+
+.prose thead {
+    @apply bg-base-200;
+}
+
+.prose th {
+    @apply font-bold;
+}
+
+/* GPU Gauge styling */
+#gpu-gauge {
+    height: 150px;
+    margin: 1rem 0;
+}
+
+/* Voice recording animation */
+.recording-pulse {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(255, 0, 0, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(255, 0, 0, 0);
+    }
+}
+
+/* Typing indicator */
+.typing-indicator {
+    display: inline-flex;
+    align-items: center;
+}
+
+.typing-dot {
+    height: 8px;
+    width: 8px;
+    border-radius: 50%;
+    background-color: currentColor;
+    animation: typing 1.4s infinite ease-in-out;
+}
+
+.typing-dot:nth-child(1) {
+    animation-delay: -0.32s;
+}
+
+.typing-dot:nth-child(2) {
+    animation-delay: -0.16s;
+    margin: 0 4px;
+}
+
+@keyframes typing {
+    0%, 80%, 100% {
+        transform: scale(0);
+        opacity: 0.5;
+    }
+    40% {
+        transform: scale(1);
+        opacity: 1;
+    }
+}
+
+/* File upload drag and drop */
+.file-drop-zone {
+    border: 2px dashed theme('colors.base-300');
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.file-drop-zone.drag-over {
+    border-color: theme('colors.primary');
+    background-color: rgba(theme('colors.primary'), 0.1);
+}
+
+/* Theme transitions */
+* {
+    transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+}
+
+/* Mobile optimizations */
+@media (max-width: 768px) {
+    .chat-bubble {
+        max-width: calc(100vw - 6rem);
+    }
+    
+    .navbar {
+        padding: 0.5rem 1rem;
+    }
+    
+    .drawer-side {
+        z-index: 20;
+    }
+    
+    .drawer-content {
+        margin-left: 0;
+    }
+}
+
+/* Focus states */
+.input:focus,
+.textarea:focus,
+.select:focus {
+    @apply outline-none ring-2 ring-primary ring-opacity-50;
+}
+
+/* Button hover states */
+.btn:hover {
+    transform: translateY(-1px);
+    transition: transform 0.2s ease;
+}
+
+.btn:active {
+    transform: translateY(0);
+}
+
+/* Chat input auto-resize */
+.auto-resize {
+    resize: none;
+    overflow: hidden;
+    min-height: 2.5rem;
+    max-height: 8rem;
+}
+
+/* Sidebar animations */
+.sidebar-item {
+    transition: all 0.2s ease;
+}
+
+.sidebar-item:hover {
+    @apply bg-base-300;
+    transform: translateX(4px);
+}
+
+/* Message actions fade */
+.message-actions {
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.chat:hover .message-actions {
+    opacity: 1;
+}
+
+/* Loading states */
+.loading-skeleton {
+    background: linear-gradient(90deg, 
+        theme('colors.base-300') 25%, 
+        theme('colors.base-200') 50%, 
+        theme('colors.base-300') 75%);
+    background-size: 200% 100%;
+    animation: loading 1.5s infinite;
+}
+
+@keyframes loading {
+    0% {
+        background-position: 200% 0;
+    }
+    100% {
+        background-position: -200% 0;
+    }
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .chat-bubble {
+        border: 2px solid currentColor;
+    }
+    
+    .btn {
+        border: 2px solid currentColor;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+} 

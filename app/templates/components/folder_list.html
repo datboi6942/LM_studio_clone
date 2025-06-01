@@ -1,0 +1,12 @@
+{% for folder in folders %}
+<button class="btn btn-ghost btn-sm justify-start w-full sidebar-item"
+        hx-get="/chat/list?folder={{ folder.name }}"
+        hx-target="#chat-list"
+        hx-on:click="setActiveFolder(this)">
+    <svg class="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
+        <path d="M2 6a2 2 0 012-2h5l2 2h5a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6z"></path>
+    </svg>
+    <span class="flex-1 text-left">{{ folder.name }}</span>
+    <span class="badge badge-sm">{{ folder.count }}</span>
+</button>
+{% endfor %} 
