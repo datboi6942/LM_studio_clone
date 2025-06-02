@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Fix Model Selection</title>
+</head>
+<body>
+    <h1>Fix Model Selection</h1>
+    
+    <p>Current model in localStorage: <span id="current"></span></p>
+    
+    <button onclick="clearModel()">Clear Model Selection</button>
+    <button onclick="setQ4Model()">Set Q4_K_S Model</button>
+    
+    <script>
+        // Show current model
+        document.getElementById('current').textContent = localStorage.getItem('currentModel') || '(none)';
+        
+        function clearModel() {
+            localStorage.removeItem('currentModel');
+            alert('Model selection cleared! Refresh the main app.');
+            location.reload();
+        }
+        
+        function setQ4Model() {
+            // Set to Q4_K_S model
+            localStorage.setItem('currentModel', 'quantfactory_tinyllama_1_1b_chat_v1_0_gguf_tinyllama_1_1b_chat_v1_0_q4_k_s');
+            alert('Model set to Q4_K_S! Refresh the main app.');
+            location.reload();
+        }
+    </script>
+</body>
+</html> 

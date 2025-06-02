@@ -50,7 +50,9 @@ def main() -> None:
         app,
         host=args.host,
         port=args.port,
-        debug=Config.DEBUG
+        debug=Config.DEBUG,
+        use_reloader=Config.DEBUG,
+        log_output=True
     )
 
 

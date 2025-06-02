@@ -30,6 +30,10 @@ def create_app(config_override: dict | None = None) -> Flask:
     if config_override:
         app.config.update(config_override)
     
+    # Configure Flask for streaming
+    app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
+    app.config['RESPONSE_TIMEOUT'] = 300  # 5 minutes for long generations
+    
     # Validate configuration
     Config.validate()
     

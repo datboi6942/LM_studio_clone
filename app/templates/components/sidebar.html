@@ -51,8 +51,19 @@
     <!-- Model Actions -->
     <div id="model-actions" class="mt-2 hidden">
         <div class="flex gap-1">
-            <button id="load-model-btn" class="btn btn-xs btn-success flex-1" onclick="loadCurrentModel()">Load</button>
-            <button id="unload-model-btn" class="btn btn-xs btn-warning flex-1" onclick="unloadCurrentModel()">Unload</button>
+            <button id="load-model-btn" class="btn btn-xs btn-success flex-1" onclick="loadCurrentModel()">
+                <span class="loading loading-spinner loading-xs hidden"></span>
+                <span class="btn-text">Load</span>
+            </button>
+            <button id="unload-model-btn" class="btn btn-xs btn-warning flex-1 hidden" onclick="unloadCurrentModel()">
+                <span class="loading loading-spinner loading-xs hidden"></span>
+                <span class="btn-text">Unload</span>
+            </button>
+        </div>
+        
+        <!-- Model Status Indicator -->
+        <div class="mt-1 text-xs text-center opacity-70" id="model-status">
+            <span class="status-text">Ready to load</span>
         </div>
     </div>
 </div>
@@ -61,36 +72,61 @@
 <div id="download-modal" class="hidden p-4 border-b border-base-300 bg-base-300">
     <h4 class="font-semibold text-sm mb-3">Download Model</h4>
     
-    <!-- Popular Models -->
+    <!-- Search Interface -->
     <div class="mb-3">
         <label class="label">
-            <span class="label-text text-xs">Quick Download</span>
+            <span class="label-text text-xs">Search HuggingFace Models</span>
         </label>
-        <div class="grid grid-cols-1 gap-1">
-            <button class="btn btn-outline btn-xs" onclick="downloadModel('microsoft/DialoGPT-medium')">
-                DialoGPT Medium (1.5GB)
-            </button>
-            <button class="btn btn-outline btn-xs" onclick="downloadModel('TinyLlama/TinyLlama-1.1B-Chat-v1.0')">
-                TinyLlama 1.1B (2.2GB)
-            </button>
-            <button class="btn btn-outline btn-xs" onclick="downloadModel('TheBloke/Llama-2-7B-Chat-GGML')">
-                Llama-2 7B Chat (4GB)
+        <div class="input-group">
+            <input type="text" 
+                   placeholder="Search for models (e.g., 'tinyllama', 'microsoft/DialoGPT')" 
+                   class="input input-bordered input-xs flex-1"
+                   id="model-search-input"
+                   onkeypress="handleSearchKeypress(event)">
+            <button class="btn btn-xs" onclick="searchModels()">
+                <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path>
+                </svg>
             </button>
         </div>
     </div>
     
-    <!-- Custom Model URL -->
-    <div class="mb-3">
-        <label class="label">
-            <span class="label-text text-xs">Custom Model</span>
-        </label>
-        <div class="input-group">
-            <input type="text" 
-                   placeholder="HuggingFace model name..." 
-                   class="input input-bordered input-xs flex-1"
-                   id="custom-model-input">
-            <button class="btn btn-xs" onclick="downloadCustomModel()">Download</button>
+    <!-- Search Results -->
+    <div id="search-results" class="mb-3 max-h-64 overflow-y-auto">
+        <!-- Popular Models (shown by default) -->
+        <div id="popular-models">
+            <div class="text-xs opacity-70 mb-2">Popular Models:</div>
+            <div class="space-y-2">
+                <div class="card card-compact bg-base-100">
+                    <div class="card-body">
+                        <h5 class="card-title text-xs">TinyLlama-1.1B-Chat</h5>
+                        <p class="text-xs opacity-70">Small but capable chat model</p>
+                        <div class="card-actions justify-end">
+                            <button class="btn btn-xs btn-primary" onclick="searchForModel('TinyLlama/TinyLlama-1.1B-Chat-v1.0')">
+                                Browse Quantizations
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="card card-compact bg-base-100">
+                    <div class="card-body">
+                        <h5 class="card-title text-xs">Microsoft DialoGPT</h5>
+                        <p class="text-xs opacity-70">Conversational model</p>
+                        <div class="card-actions justify-end">
+                            <button class="btn btn-xs btn-primary" onclick="searchForModel('microsoft/DialoGPT-medium')">
+                                Browse Quantizations
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
+    </div>
+    
+    <!-- Loading indicator -->
+    <div id="search-loading" class="hidden text-center py-4">
+        <span class="loading loading-spinner loading-sm"></span>
+        <span class="text-xs ml-2">Searching HuggingFace...</span>
     </div>
     
     <!-- Download Progress -->
@@ -260,15 +296,35 @@ function setCurrentModel(modelName) {
             const actions = document.getElementById('model-actions');
             const loadBtn = document.getElementById('load-model-btn');
             const unloadBtn = document.getElementById('unload-model-btn');
+            const statusText = document.getElementById('model-status').querySelector('.status-text');
             
             actions.classList.remove('hidden');
             
             if (data.loaded) {
+                // Model is loaded
                 loadBtn.classList.add('hidden');
                 unloadBtn.classList.remove('hidden');
+                statusText.textContent = 'Model loaded and ready';
+                statusText.classList.add('text-success');
+                statusText.classList.remove('text-warning', 'text-error');
+                
+                // Enable chat interface
+                if (window.llmCockpit) {
+                    window.llmCockpit.enableChatInterface();
+                }
             } else {
+                // Model is not loaded
                 loadBtn.classList.remove('hidden');
                 unloadBtn.classList.add('hidden');
+                statusText.textContent = 'Ready to load';
+                statusText.classList.add('text-warning');
+                statusText.classList.remove('text-success', 'text-error');
+                
+                // Disable chat interface if this is the current model
+                const currentModel = localStorage.getItem('currentModel');
+                if (currentModel === modelName && window.llmCockpit) {
+                    window.llmCockpit.disableChatInterface();
+                }
             }
             
             // Store in localStorage
@@ -276,6 +332,10 @@ function setCurrentModel(modelName) {
         })
         .catch(error => {
             console.error('Error getting model info:', error);
+            const statusText = document.getElementById('model-status').querySelector('.status-text');
+            statusText.textContent = 'Error loading info';
+            statusText.classList.add('text-error');
+            statusText.classList.remove('text-success', 'text-warning');
         });
 }
 
@@ -283,8 +343,15 @@ function loadCurrentModel() {
     if (!currentModelName) return;
     
     const loadBtn = document.getElementById('load-model-btn');
+    const loadBtnText = loadBtn.querySelector('.btn-text');
+    const loadBtnSpinner = loadBtn.querySelector('.loading');
+    const statusText = document.getElementById('model-status').querySelector('.status-text');
+    
+    // Show loading state
     loadBtn.disabled = true;
-    loadBtn.textContent = 'Loading...';
+    loadBtnSpinner.classList.remove('hidden');
+    loadBtnText.textContent = 'Loading...';
+    statusText.textContent = 'Loading model...';
     
     fetch(`/api/models/${currentModelName}/load`, {
         method: 'POST'
@@ -292,19 +359,24 @@ function loadCurrentModel() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
+            // Success feedback is now handled by socket events
+            // Just update the local UI state
             setCurrentModel(currentModelName); // Refresh UI
-            window.llmCockpit?.showToast(data.message, 'success');
         } else {
             window.llmCockpit?.showToast(data.error, 'error');
+            statusText.textContent = 'Failed to load';
         }
     })
     .catch(error => {
         console.error('Error loading model:', error);
         window.llmCockpit?.showToast('Failed to load model', 'error');
+        statusText.textContent = 'Load failed';
     })
     .finally(() => {
+        // Reset button state
         loadBtn.disabled = false;
-        loadBtn.textContent = 'Load';
+        loadBtnSpinner.classList.add('hidden');
+        loadBtnText.textContent = 'Load';
     });
 }
 
@@ -312,8 +384,15 @@ function unloadCurrentModel() {
     if (!currentModelName) return;
     
     const unloadBtn = document.getElementById('unload-model-btn');
+    const unloadBtnText = unloadBtn.querySelector('.btn-text');
+    const unloadBtnSpinner = unloadBtn.querySelector('.loading');
+    const statusText = document.getElementById('model-status').querySelector('.status-text');
+    
+    // Show loading state
     unloadBtn.disabled = true;
-    unloadBtn.textContent = 'Unloading...';
+    unloadBtnSpinner.classList.remove('hidden');
+    unloadBtnText.textContent = 'Unloading...';
+    statusText.textContent = 'Unloading model...';
     
     fetch(`/api/models/${currentModelName}/unload`, {
         method: 'POST'
@@ -321,19 +400,23 @@ function unloadCurrentModel() {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
+            // Success feedback is now handled by socket events
             setCurrentModel(currentModelName); // Refresh UI
-            window.llmCockpit?.showToast(data.message, 'success');
         } else {
             window.llmCockpit?.showToast(data.error, 'error');
+            statusText.textContent = 'Failed to unload';
         }
     })
     .catch(error => {
         console.error('Error unloading model:', error);
         window.llmCockpit?.showToast('Failed to unload model', 'error');
+        statusText.textContent = 'Unload failed';
     })
     .finally(() => {
+        // Reset button state
         unloadBtn.disabled = false;
-        unloadBtn.textContent = 'Unload';
+        unloadBtnSpinner.classList.add('hidden');
+        unloadBtnText.textContent = 'Unload';
     });
 }
 
@@ -345,31 +428,100 @@ function hideDownloadModal() {
     document.getElementById('download-modal').classList.add('hidden');
 }
 
-function downloadModel(modelName) {
+function searchModels() {
+    const input = document.getElementById('model-search-input');
+    const query = input.value.trim();
+    
+    if (!query) {
+        window.llmCockpit?.showToast('Please enter a model name', 'error');
+        return;
+    }
+    
+    const searchResults = document.getElementById('search-results');
+    const loading = document.getElementById('search-loading');
+    
+    searchResults.classList.add('hidden');
+    loading.classList.remove('hidden');
+    
+    fetch(`/api/models/search?q=${encodeURIComponent(query)}`)
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            searchResults.innerHTML = data.models.map(model => `
+                <div class="card card-compact bg-base-100 mb-2">
+                    <div class="card-body">
+                        <h5 class="card-title text-xs">${model.name}</h5>
+                        <p class="text-xs opacity-70 mb-2">${model.description || 'No description'}</p>
+                        <p class="text-xs opacity-50 mb-2">Downloads: ${model.downloads || 0}</p>
+                        
+                        <div class="space-y-1">
+                            <div class="text-xs font-semibold">Available Quantizations:</div>
+                            ${model.quantizations.map(quant => `
+                                <div class="flex justify-between items-center">
+                                    <span class="text-xs">${quant.name} (${quant.size})</span>
+                                    <button class="btn btn-xs btn-primary" 
+                                            onclick="downloadSpecificModel('${model.full_name}', '${quant.file}', '${quant.name}')">
+                                        Download
+                                    </button>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            
+            if (data.models.length === 0) {
+                searchResults.innerHTML = '<div class="text-center text-xs opacity-70 py-4">No models found. Try a different search term.</div>';
+            }
+        } else {
+            window.llmCockpit?.showToast(data.error || 'Search failed', 'error');
+            searchResults.innerHTML = '<div class="text-center text-xs opacity-70 py-4">Search failed. Please try again.</div>';
+        }
+    })
+    .catch(error => {
+        console.error('Search error:', error);
+        window.llmCockpit?.showToast('Search failed: ' + error.message, 'error');
+        searchResults.innerHTML = '<div class="text-center text-xs opacity-70 py-4">Search failed. Please try again.</div>';
+    })
+    .finally(() => {
+        searchResults.classList.remove('hidden');
+        loading.classList.add('hidden');
+    });
+}
+
+function downloadSpecificModel(modelName, fileName, quantName) {
     const progress = document.getElementById('download-progress');
+    const progressText = progress.querySelector('.text-xs');
     progress.classList.remove('hidden');
     
-    window.llmCockpit?.showToast(`Starting download of ${modelName}...`, 'info');
+    // Show initial progress
+    progressText.textContent = `Starting download of ${quantName}...`;
+    window.llmCockpit?.showToast(`Starting download of ${modelName} (${quantName})...`, 'info');
     
-    // Call the real download API
+    // Call the download API with specific file
     fetch('/api/models/download', {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            model_name: modelName
+            model_name: modelName,
+            file: fileName,
+            quantization: quantName
         })
     })
     .then(response => response.json())
     .then(data => {
         if (data.success) {
+            progressText.textContent = 'Download started! Checking for completion...';
             window.llmCockpit?.showToast(data.message, 'success');
             
-            // Refresh models list after download starts
-            setTimeout(() => {
-                location.reload(); // Refresh page to reload models
-            }, 2000);
+            // Close modal and show success
+            hideDownloadModal();
+            
+            // Start intelligent polling for completion
+            pollForNewModel(modelName, quantName);
+            
         } else {
             window.llmCockpit?.showToast(data.error || 'Download failed', 'error');
         }
@@ -383,17 +535,129 @@ function downloadModel(modelName) {
     });
 }
 
-function downloadCustomModel() {
-    const input = document.getElementById('custom-model-input');
-    const modelName = input.value.trim();
+function pollForNewModel(originalModelName, quantName) {
+    let pollCount = 0;
+    const maxPolls = 120; // 10 minutes max (5-second intervals)
+    let initialModelCount = 0;
     
-    if (!modelName) {
-        window.llmCockpit?.showToast('Please enter a model name', 'error');
-        return;
+    // Get initial model count
+    fetch('/api/models')
+        .then(response => response.json())
+        .then(models => {
+            initialModelCount = models.length;
+        })
+        .catch(() => {
+            initialModelCount = 0;
+        });
+    
+    const pollInterval = setInterval(() => {
+        pollCount++;
+        
+        // Refresh models to detect new downloads
+        fetch('/api/models/refresh', { method: 'POST' })
+            .then(response => response.json())
+            .then(refreshData => {
+                if (refreshData.success) {
+                    // Check current models
+                    return fetch('/api/models');
+                }
+                throw new Error('Refresh failed');
+            })
+            .then(response => response.json())
+            .then(models => {
+                // Check if we have more models now
+                if (models.length > initialModelCount) {
+                    // Look for a model that might match our download
+                    const downloadedModel = models.find(m => {
+                        const lowerName = m.name.toLowerCase();
+                        const lowerOriginal = originalModelName.toLowerCase();
+                        const lowerQuant = quantName.toLowerCase();
+                        
+                        return lowerName.includes(lowerOriginal.split('/')[1]) || 
+                               lowerName.includes(lowerQuant) ||
+                               lowerName.includes(lowerOriginal.split('-')[0]);
+                    });
+                    
+                    if (downloadedModel) {
+                        clearInterval(pollInterval);
+                        window.llmCockpit?.showToast(`Model ${downloadedModel.display_name || downloadedModel.name} is now available!`, 'success');
+                        refreshModelsList();
+                        return;
+                    }
+                }
+                
+                // Also check if any model appears that wasn't there before
+                if (models.length > initialModelCount) {
+                    clearInterval(pollInterval);
+                    window.llmCockpit?.showToast(`New model detected! Please check the dropdown.`, 'success');
+                    refreshModelsList();
+                    return;
+                }
+                
+                // Stop polling after max attempts
+                if (pollCount >= maxPolls) {
+                    clearInterval(pollInterval);
+                    window.llmCockpit?.showToast('Download may have completed. Please check manually if needed.', 'warning');
+                }
+            })
+            .catch(error => {
+                if (pollCount >= maxPolls) {
+                    clearInterval(pollInterval);
+                    console.error('Polling error:', error);
+                }
+            });
+    }, 5000); // Poll every 5 seconds
+}
+
+function refreshModelsList() {
+    // Refresh the models dropdown
+    fetch('/api/models')
+        .then(response => response.json())
+        .then(models => {
+            const select = document.getElementById('model-select');
+            const currentValue = select.value;
+            
+            if (models.length === 0) {
+                select.innerHTML = '<option disabled selected>No models available - Download one above</option>';
+                return;
+            }
+            
+            select.innerHTML = '<option disabled selected>Select a model...</option>';
+            models.forEach(model => {
+                const option = document.createElement('option');
+                option.value = model.name;
+                option.textContent = model.display_name || model.name;
+                
+                // Restore previous selection if it still exists
+                if (model.name === currentValue) {
+                    option.selected = true;
+                    setCurrentModel(model.name);
+                } else if (model.active) {
+                    option.selected = true;
+                    setCurrentModel(model.name);
+                }
+                
+                select.appendChild(option);
+            });
+            
+            console.log(`Refreshed models list: ${models.length} models found`);
+        })
+        .catch(error => {
+            console.error('Error refreshing models:', error);
+            window.llmCockpit?.showToast('Failed to refresh models list', 'error');
+        });
+}
+
+function searchForModel(modelName) {
+    const input = document.getElementById('model-search-input');
+    input.value = modelName;
+    searchModels();
+}
+
+function handleSearchKeypress(event) {
+    if (event.key === 'Enter') {
+        searchModels();
     }
-    
-    downloadModel(modelName);
-    input.value = '';
 }
 
 // Load models on page load

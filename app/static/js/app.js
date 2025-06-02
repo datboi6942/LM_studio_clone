@@ -47,6 +47,19 @@ class LLMCockpit {
             this.updateModelLoadingProgress(data);
         });
         
+        // Model events
+        this.socket.on('model_loaded', (data) => {
+            this.handleModelLoaded(data);
+        });
+        
+        this.socket.on('model_unloaded', (data) => {
+            this.handleModelUnloaded(data);
+        });
+        
+        this.socket.on('model_switched', (data) => {
+            this.handleModelSwitched(data);
+        });
+        
         // RAG indexing progress
         this.socket.on('rag_progress', (data) => {
             this.updateRAGProgress(data);
@@ -453,6 +466,150 @@ class LLMCockpit {
         }
     }
     
+    // Model Event Handlers
+    handleModelLoaded(data) {
+        this.showToast(`Model ${data.model_id} loaded successfully!`, 'success');
+        
+        // Update UI elements to reflect loaded state
+        this.updateModelUI(data.model_id, { loaded: true });
+        
+        // Enable chat interface if this is the active model
+        this.enableChatInterface();
+    }
+    
+    handleModelUnloaded(data) {
+        this.showToast(`Model ${data.model_id} unloaded`, 'info');
+        
+        // Update UI elements to reflect unloaded state
+        this.updateModelUI(data.model_id, { loaded: false });
+        
+        // Disable chat interface if this was the active model
+        const currentModel = localStorage.getItem('currentModel');
+        if (currentModel === data.model_id) {
+            this.disableChatInterface();
+        }
+    }
+    
+    handleModelSwitched(data) {
+        this.showToast(`Switched to model ${data.model_id}`, 'success');
+        
+        // Update active model in UI
+        this.updateModelUI(data.model_id, { active: true });
+        
+        // Enable chat interface
+        this.enableChatInterface();
+    }
+    
+    updateModelUI(modelId, state) {
+        // Update model selection dropdown
+        const select = document.getElementById('model-select');
+        if (select) {
+            // Update current selection if it matches
+            if (select.value === modelId) {
+                // Trigger the change event to refresh UI
+                if (typeof setCurrentModel === 'function') {
+                    setCurrentModel(modelId);
+                }
+            }
+        }
+        
+        // Update any model status indicators
+        const statusElements = document.querySelectorAll(`[data-model-id="${modelId}"]`);
+        statusElements.forEach(el => {
+            if (state.loaded !== undefined) {
+                el.dataset.loaded = state.loaded;
+                el.classList.toggle('model-loaded', state.loaded);
+                el.classList.toggle('model-unloaded', !state.loaded);
+            }
+            if (state.active !== undefined) {
+                el.dataset.active = state.active;
+                el.classList.toggle('model-active', state.active);
+            }
+        });
+    }
+    
+    enableChatInterface() {
+        // Enable chat input and send button using Alpine.js store or direct DOM access
+        // Since we're using Alpine.js, we need to work with the actual elements
+        
+        // Try to access Alpine data first
+        if (window.Alpine) {
+            // Update the currentModel in the chat interface
+            const chatContainer = document.querySelector('[x-data*="chatInterface"]');
+            if (chatContainer && chatContainer._x_dataStack) {
+                const chatData = chatContainer._x_dataStack[0];
+                if (chatData && typeof chatData.currentModel !== 'undefined') {
+                    chatData.currentModel = localStorage.getItem('currentModel') || '';
+                }
+            }
+        }
+        
+        // Also update UI elements directly
+        const messageInput = document.querySelector('textarea[x-ref="messageInput"]');
+        const sendButtons = document.querySelectorAll('button[\\@click*="sendMessage"]');
+        
+        if (messageInput) {
+            messageInput.disabled = false;
+            messageInput.placeholder = 'Type your message... (Ctrl+Enter to send)';
+        }
+        
+        sendButtons.forEach(button => {
+            button.disabled = false;
+        });
+        
+        // Show any hidden chat elements
+        const chatElements = document.querySelectorAll('.chat-disabled');
+        chatElements.forEach(el => {
+            el.classList.remove('chat-disabled');
+        });
+        
+        // Update welcome message if visible
+        const welcomeContainer = document.querySelector('[x-show="!currentModel"]');
+        if (welcomeContainer) {
+            welcomeContainer.style.display = 'none';
+        }
+    }
+    
+    disableChatInterface() {
+        // Disable chat interface when no model is loaded
+        
+        // Try to access Alpine data first
+        if (window.Alpine) {
+            const chatContainer = document.querySelector('[x-data*="chatInterface"]');
+            if (chatContainer && chatContainer._x_dataStack) {
+                const chatData = chatContainer._x_dataStack[0];
+                if (chatData && typeof chatData.currentModel !== 'undefined') {
+                    chatData.currentModel = '';
+                }
+            }
+        }
+        
+        // Also update UI elements directly
+        const messageInput = document.querySelector('textarea[x-ref="messageInput"]');
+        const sendButtons = document.querySelectorAll('button[\\@click*="sendMessage"]');
+        
+        if (messageInput) {
+            messageInput.disabled = true;
+            messageInput.placeholder = 'Load a model to start chatting...';
+        }
+        
+        sendButtons.forEach(button => {
+            button.disabled = true;
+        });
+        
+        // Hide chat elements that require a model
+        const chatElements = document.querySelectorAll('.requires-model');
+        chatElements.forEach(el => {
+            el.classList.add('chat-disabled');
+        });
+        
+        // Show welcome message
+        const welcomeContainer = document.querySelector('[x-show="!currentModel"]');
+        if (welcomeContainer) {
+            welcomeContainer.style.display = 'block';
+        }
+    }
+
     updateModelLoadingProgress(data) {
         // Show model loading progress
         const progressBar = document.getElementById('model-loading-progress');

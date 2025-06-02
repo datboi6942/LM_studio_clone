@@ -266,4 +266,62 @@ pre code {
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
     }
+}
+
+/* Model status indicators */
+.model-loaded {
+    @apply border-success;
+}
+
+.model-unloaded {
+    @apply border-warning;
+}
+
+.model-active {
+    @apply bg-primary bg-opacity-10;
+}
+
+/* Model status text colors */
+.text-success {
+    @apply text-green-500;
+}
+
+.text-warning {
+    @apply text-yellow-500;
+}
+
+.text-error {
+    @apply text-red-500;
+}
+
+/* Chat interface states */
+.chat-disabled {
+    @apply opacity-50 pointer-events-none;
+}
+
+/* Model action buttons */
+#model-actions .btn {
+    @apply transition-all duration-200;
+}
+
+#model-actions .btn:disabled {
+    @apply opacity-50 cursor-not-allowed;
+}
+
+#model-actions .btn .loading {
+    @apply w-3 h-3;
+}
+
+/* Status indicator pulse animation */
+.status-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+    50% {
+        opacity: .5;
+    }
 } 

@@ -320,10 +320,6 @@ function chatInterface() {
                     throw new Error(`HTTP ${response.status}`);
                 }
                 
-                // Handle streaming response
-                const reader = response.body.getReader();
-                const decoder = new TextDecoder();
-                
                 // Add assistant message placeholder
                 const assistantMessage = {
                     role: 'assistant',
@@ -331,34 +327,76 @@ function chatInterface() {
                     timestamp: new Date()
                 };
                 this.messages.push(assistantMessage);
+                const messageIndex = this.messages.length - 1;
                 
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    
-                    const chunk = decoder.decode(value);
-                    const lines = chunk.split('\n');
-                    
-                    for (const line of lines) {
-                        if (line.startsWith('data: ')) {
-                            const data = line.slice(6);
-                            if (data === '[DONE]') break;
+                // Handle streaming response
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                
+                const processChunk = async () => {
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        
+                        // Decode chunk
+                        const chunk = decoder.decode(value, { stream: true });
+                        buffer += chunk;
+                        
+                        // Process all complete SSE messages in the buffer
+                        let boundary;
+                        while ((boundary = buffer.indexOf('\n\n')) >= 0) {
+                            const message = buffer.slice(0, boundary);
+                            buffer = buffer.slice(boundary + 2);
                             
-                            try {
-                                const parsed = JSON.parse(data);
-                                const delta = parsed.choices?.[0]?.delta?.content;
-                                if (delta) {
-                                    assistantMessage.content += delta;
-                                    this.$nextTick(() => {
-                                        this.scrollToBottom();
-                                        this.highlightCode();
-                                    });
+                            // Process each line in the message
+                            const lines = message.split('\n');
+                            for (const line of lines) {
+                                if (line.startsWith('data: ')) {
+                                    const data = line.slice(6);
+                                    
+                                    if (data === '[DONE]') {
+                                        this.isStreaming = false;
+                                        return;
+                                    }
+                                    
+                                    try {
+                                        const parsed = JSON.parse(data);
+                                        const content = parsed.choices?.[0]?.delta?.content;
+                                        
+                                        if (content) {
+                                            // Update message content immediately
+                                            this.messages[messageIndex].content += content;
+                                            
+                                            // Force Alpine.js to update the DOM immediately
+                                            this.$nextTick(() => {
+                                                // Update the specific message element
+                                                const msgElements = document.querySelectorAll('.chat-bubble .prose');
+                                                if (msgElements[messageIndex]) {
+                                                    msgElements[messageIndex].innerHTML = this.renderMessage(this.messages[messageIndex].content);
+                                                }
+                                                this.scrollToBottom();
+                                            });
+                                        }
+                                        
+                                        if (parsed.choices?.[0]?.finish_reason) {
+                                            this.isStreaming = false;
+                                            return;
+                                        }
+                                    } catch (e) {
+                                        console.error('Parse error:', e, data);
+                                    }
                                 }
-                            } catch (e) {
-                                // Ignore parsing errors
                             }
                         }
                     }
+                };
+                
+                await processChunk();
+                
+                // If no content was generated, show an error
+                if (!this.messages[messageIndex].content) {
+                    this.messages[messageIndex].content = "I apologize, but I couldn't generate a response. Please try again.";
                 }
                 
             } catch (error) {

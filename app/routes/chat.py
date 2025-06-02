@@ -8,6 +8,8 @@ from typing import List, Dict, Any
 import os
 import subprocess
 import threading
+import structlog
+from ..services.model_registry import ModelRegistry
 
 bp = Blueprint("chat", __name__, url_prefix="/")
 
@@ -158,7 +160,20 @@ def load_model(model_name):
     try:
         model_registry = current_app.model_registry
         model_registry.load_model(model_name)
-        return jsonify({"success": True, "message": f"Model {model_name} loaded successfully"})
+        
+        # Emit socket event to notify frontend of successful load
+        socketio = current_app.extensions.get('socketio')
+        if socketio:
+            socketio.emit('model_loaded', {
+                'model_id': model_name,
+                'status': 'loaded'
+            })
+        
+        return jsonify({
+            "success": True, 
+            "message": f"Model {model_name} loaded successfully",
+            "loaded": True
+        })
     
     except Exception as e:
         current_app.logger.error(f"Failed to load model {model_name}: {e}")
@@ -171,7 +186,20 @@ def unload_model(model_name):
     try:
         model_registry = current_app.model_registry
         model_registry.unload_model(model_name)
-        return jsonify({"success": True, "message": f"Model {model_name} unloaded successfully"})
+        
+        # Emit socket event to notify frontend of successful unload
+        socketio = current_app.extensions.get('socketio')
+        if socketio:
+            socketio.emit('model_unloaded', {
+                'model_id': model_name,
+                'status': 'unloaded'
+            })
+        
+        return jsonify({
+            "success": True, 
+            "message": f"Model {model_name} unloaded successfully",
+            "loaded": False
+        })
     
     except Exception as e:
         current_app.logger.error(f"Failed to unload model {model_name}: {e}")
@@ -184,43 +212,178 @@ def switch_model(model_name):
     try:
         model_registry = current_app.model_registry
         model_registry.switch_model(model_name)
-        return jsonify({"success": True, "message": f"Switched to model {model_name}"})
+        
+        # Emit socket event to notify frontend of model switch
+        socketio = current_app.extensions.get('socketio')
+        if socketio:
+            socketio.emit('model_switched', {
+                'model_id': model_name,
+                'status': 'active'
+            })
+        
+        return jsonify({
+            "success": True, 
+            "message": f"Switched to model {model_name}",
+            "active": True
+        })
     
     except Exception as e:
         current_app.logger.error(f"Failed to switch to model {model_name}: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
+@bp.route("/api/models/search", methods=["GET"])
+def search_huggingface_models():
+    """Search HuggingFace for available models."""
+    try:
+        query = request.args.get("q", "").strip()
+        if not query:
+            return jsonify({"success": False, "error": "Search query is required"}), 400
+        
+        from huggingface_hub import HfApi, list_repo_files
+        
+        api = HfApi()
+        
+        # Search for models
+        models = api.list_models(
+            search=query,
+            filter=["gguf", "pytorch"],  # Focus on models likely to work
+            limit=10,
+            sort="downloads"
+        )
+        
+        results = []
+        for model in models:
+            try:
+                # Get files in the repository
+                files = list_repo_files(model.id, token=os.getenv("HF_TOKEN"))
+                
+                # Find GGUF files and other model files
+                gguf_files = [f for f in files if f.endswith('.gguf')]
+                other_files = [f for f in files if f.endswith(('.safetensors', '.bin', '.pt'))]
+                
+                if gguf_files or other_files:
+                    # Extract quantization info from GGUF files
+                    quantizations = []
+                    for gguf_file in gguf_files:
+                        # Extract quantization from filename (e.g., Q4_K_M, Q5_0, etc.)
+                        parts = gguf_file.lower().split('.')
+                        for part in parts:
+                            if any(q in part for q in ['q4', 'q5', 'q6', 'q8', 'f16', 'f32']):
+                                size_mb = "Unknown"
+                                try:
+                                    # Try to get file size (this might fail for private repos)
+                                    file_info = api.get_paths_info(model.id, [gguf_file])
+                                    if file_info and len(file_info) > 0:
+                                        size_bytes = file_info[0].size if hasattr(file_info[0], 'size') else None
+                                        if size_bytes:
+                                            size_mb = f"{size_bytes / (1024*1024):.0f}MB"
+                                except:
+                                    pass
+                                
+                                quantizations.append({
+                                    "name": part.upper(),
+                                    "file": gguf_file,
+                                    "size": size_mb
+                                })
+                                break
+                    
+                    # If no GGUF files, check if it's convertible
+                    if not quantizations and other_files:
+                        quantizations.append({
+                            "name": "Convert to GGUF",
+                            "file": "convert",
+                            "size": "Will convert"
+                        })
+                    
+                    if quantizations:
+                        results.append({
+                            "id": model.id,
+                            "name": model.id.split('/')[-1],
+                            "full_name": model.id,
+                            "downloads": getattr(model, 'downloads', 0),
+                            "description": getattr(model, 'card_data', {}).get('description', '') if hasattr(model, 'card_data') and model.card_data else '',
+                            "quantizations": quantizations[:5]  # Limit to top 5 quantizations
+                        })
+                        
+            except Exception as e:
+                current_app.logger.warning(f"Failed to get files for model {model.id}: {e}")
+                continue
+        
+        return jsonify({
+            "success": True,
+            "models": results[:10]  # Limit to top 10 results
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f"Failed to search HuggingFace: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
 @bp.route("/api/models/download", methods=["POST"])
 def download_model():
-    """Download a model from HuggingFace."""
+    """Download a specific model file from HuggingFace."""
     try:
         data = request.json
         model_name = data.get("model_name")
+        specific_file = data.get("file")  # Specific file to download
+        quantization = data.get("quantization", "Q4_K_M")  # Fallback quantization
         
         if not model_name:
             return jsonify({"success": False, "error": "Model name is required"}), 400
         
+        # Get the current app for context (fix Flask context issue)
+        app = current_app._get_current_object()
+        
         # Start download in background
         def download_task():
-            with current_app.app_context():
-                try:
-                    # Use the download_model.py script
-                    script_path = os.path.join(os.getcwd(), "download_model.py")
-                    result = subprocess.run([
-                        "python", script_path, model_name
-                    ], capture_output=True, text=True, timeout=3600)  # 1 hour timeout
-                    
-                    if result.returncode == 0:
-                        current_app.logger.info(f"Model {model_name} downloaded successfully")
-                        # TODO: Add model to registry
-                    else:
-                        current_app.logger.error(f"Failed to download model {model_name}: {result.stderr}")
+            try:
+                # Import download function
+                import sys
+                from pathlib import Path
+                from huggingface_hub import hf_hub_download
+                
+                app.logger.info(f"Starting download of {model_name}, file: {specific_file}")
+                
+                if specific_file and specific_file != "convert":
+                    # Download specific file
+                    try:
+                        local_file = hf_hub_download(
+                            repo_id=model_name,
+                            filename=specific_file,
+                            token=os.getenv("HF_TOKEN"),
+                            local_dir=f"./models/{model_name.replace('/', '_')}"
+                        )
+                        model_path = Path(local_file)
+                        app.logger.info(f"Downloaded specific file to: {model_path}")
                         
-                except subprocess.TimeoutExpired:
-                    current_app.logger.error(f"Download timeout for model {model_name}")
-                except Exception as e:
-                    current_app.logger.error(f"Download error for model {model_name}: {e}")
+                    except Exception as e:
+                        app.logger.error(f"Failed to download specific file: {e}")
+                        return
+                else:
+                    # Fallback to old method for conversion
+                    project_root = Path(__file__).parent.parent.parent
+                    sys.path.insert(0, str(project_root))
+                    
+                    from download_model import download_model as dl_model
+                    model_path = dl_model(model_name, quantization=quantization)
+                
+                if model_path and model_path.exists():
+                    app.logger.info(f"Model {model_name} downloaded successfully to {model_path}")
+                    
+                    # Since we now have dynamic model discovery, just reload the registry
+                    # No need to update config files manually
+                    with app.app_context():
+                        try:
+                            app.model_registry.reload_models()
+                            app.logger.info(f"Model registry reloaded, new model should be available")
+                        except Exception as e:
+                            app.logger.error(f"Failed to reload model registry: {e}")
+                else:
+                    app.logger.error(f"Download completed but model file not found: {model_path}")
+                    
+            except Exception as e:
+                app.logger.error(f"Download error for model {model_name}: {e}")
         
         # Start download in background thread
         thread = threading.Thread(target=download_task)
@@ -229,11 +392,25 @@ def download_model():
         
         return jsonify({
             "success": True, 
-            "message": f"Started downloading {model_name}. Check logs for progress."
+            "message": f"Started downloading {model_name} ({specific_file if specific_file else 'auto-convert'}). The model will appear in the dropdown once download completes."
         })
     
     except Exception as e:
         current_app.logger.error(f"Failed to start download: {e}")
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@bp.route("/api/models/refresh", methods=["POST"])
+def refresh_models():
+    """Manually refresh the model registry."""
+    try:
+        current_app.model_registry.reload_models()
+        return jsonify({
+            "success": True, 
+            "message": "Models refreshed successfully"
+        })
+    except Exception as e:
+        current_app.logger.error(f"Failed to refresh models: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 

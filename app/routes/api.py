@@ -58,6 +58,14 @@ def chat_completions() -> Any:
         messages = data.get("messages", [])
         stream = data.get("stream", False)
         
+        # Debug logging
+        logger.info("Chat completion request", model_id=model_id, messages_count=len(messages), stream=stream)
+        
+        # Validate model_id
+        if not model_id:
+            logger.error("No model specified in request")
+            return jsonify({"error": "No model specified"}), 400
+        
         # Generation parameters
         kwargs = {
             "temperature": data.get("temperature", 0.7),
@@ -70,10 +78,12 @@ def chat_completions() -> Any:
         try:
             model = current_app.model_registry.get_model(model_id)
         except (KeyError, RuntimeError) as e:
-            return jsonify({"error": str(e)}), 404
+            logger.error("Model not found", model_id=model_id, error=str(e))
+            return jsonify({"error": f"Model not found: {model_id}"}), 404
         
         # Load model if needed
         if not model.is_loaded:
+            logger.info("Auto-loading model", model_id=model_id)
             model.load()
         
         # Generate response
@@ -81,20 +91,26 @@ def chat_completions() -> Any:
             def generate() -> Iterator[str]:
                 try:
                     for chunk in model.chat(messages, stream=True, **kwargs):
-                        yield make_sse(chunk)
-                    yield make_sse({"done": True})
+                        # Send the chunk immediately with proper SSE format
+                        yield f"data: {json.dumps(chunk)}\n\n"
+                    # Send a final [DONE] message to indicate completion
+                    yield "data: [DONE]\n\n"
                 except Exception as e:
                     logger.error("Streaming error", error=str(e))
-                    yield make_sse({"error": str(e)})
+                    yield f"data: {json.dumps({'error': str(e)})}\n\n"
             
-            return Response(
+            response = Response(
                 generate(),
                 mimetype="text/event-stream",
                 headers={
-                    "Cache-Control": "no-cache",
-                    "X-Accel-Buffering": "no"
+                    "Cache-Control": "no-cache, no-transform",
+                    "X-Accel-Buffering": "no",  # Disable Nginx buffering
+                    "Connection": "keep-alive",
+                    "Transfer-Encoding": "chunked"
                 }
             )
+            response.implicit_sequence_conversion = False  # Disable Flask's buffering
+            return response
         else:
             # Non-streaming response
             chunks = list(model.chat(messages, stream=False, **kwargs))

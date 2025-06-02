@@ -47,8 +47,16 @@ def download_model(
     # Check if GGUF file exists
     gguf_files = list(local_path.glob("*.gguf"))
     if gguf_files:
-        print(f"Found GGUF file: {gguf_files[0]}")
-        return gguf_files[0]
+        # For multiple GGUF files, try to find a good one or pick the first
+        chosen_gguf = gguf_files[0]
+        for gguf_file in gguf_files:
+            # Prefer Q4_K_M or similar quantization if available
+            if any(quant in gguf_file.name.lower() for quant in ['q4_k_m', 'q4_k', 'q4']):
+                chosen_gguf = gguf_file
+                break
+        
+        print(f"Found GGUF file: {chosen_gguf}")
+        return chosen_gguf
     
     # Check for safetensors/bin files to convert
     model_files = list(local_path.glob("*.safetensors")) + list(local_path.glob("*.bin"))
@@ -56,11 +64,16 @@ def download_model(
         print("No model files found to convert")
         return local_path
     
-    # Convert to GGUF
+    # Try to convert to GGUF
     print(f"Converting to GGUF with quantization {quantization}...")
     output_file = local_path / f"{repo_id.split('/')[-1]}-{quantization}.gguf"
     
+    # Try different conversion methods
+    conversion_successful = False
+    
+    # Method 1: Try llama_cpp.convert
     try:
+        print("Attempting conversion with llama_cpp.convert...")
         subprocess.run([
             "python", "-m", "llama_cpp.convert",
             "--outtype", quantization.lower(),
@@ -69,11 +82,50 @@ def download_model(
         ], check=True)
         
         print(f"Converted to: {output_file}")
-        return output_file
+        conversion_successful = True
         
-    except subprocess.CalledProcessError as e:
-        print(f"Conversion failed: {e}")
-        return local_path
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"llama_cpp.convert failed: {e}")
+    
+    # Method 2: Try alternative conversion if available
+    if not conversion_successful:
+        try:
+            print("Attempting conversion with alternative method...")
+            # Check if we have convert.py in llama.cpp
+            import llama_cpp
+            llama_cpp_path = Path(llama_cpp.__file__).parent
+            convert_script = llama_cpp_path / "convert.py"
+            
+            if convert_script.exists():
+                subprocess.run([
+                    "python", str(convert_script),
+                    str(local_path),
+                    "--outtype", quantization.lower(),
+                    "--outfile", str(output_file)
+                ], check=True)
+                
+                print(f"Converted to: {output_file}")
+                conversion_successful = True
+                
+        except Exception as e:
+            print(f"Alternative conversion failed: {e}")
+    
+    # If conversion failed, just return the directory with the original files
+    if not conversion_successful:
+        print("Conversion failed, but model files are available for manual setup")
+        print(f"Original files at: {local_path}")
+        
+        # Try to find the main model file to return
+        main_file = None
+        for pattern in ["pytorch_model.bin", "model.safetensors", "*.bin", "*.safetensors"]:
+            matches = list(local_path.glob(pattern))
+            if matches:
+                main_file = matches[0]
+                break
+        
+        return main_file if main_file else local_path
+    
+    return output_file
 
 
 def main() -> None:
