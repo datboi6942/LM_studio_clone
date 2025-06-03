@@ -29,6 +29,13 @@ class Config:
     MODELS_DIR: Path = Path(os.getenv("MODELS_DIR", "./models"))
     MODEL_CONFIG_PATH: Path = Path(os.getenv("MODEL_CONFIG_PATH", "./app/config_models.yaml"))
     DEFAULT_MODEL: str = os.getenv("DEFAULT_MODEL", "qwen2-7b-instruct")
+    DEFAULT_TEMPERATURE: float = float(os.getenv("DEFAULT_TEMPERATURE", "0.7"))
+    DEFAULT_TOP_P: float = float(os.getenv("DEFAULT_TOP_P", "0.95"))
+    DEFAULT_TOP_K: int = int(os.getenv("DEFAULT_TOP_K", "40"))
+    DEFAULT_MAX_TOKENS: int = int(os.getenv("DEFAULT_MAX_TOKENS", "2048"))
+    REPEAT_PENALTY: float = float(os.getenv("REPEAT_PENALTY", "1.1"))
+    PRESENCE_PENALTY: float = float(os.getenv("PRESENCE_PENALTY", "0.0"))
+    FREQUENCY_PENALTY: float = float(os.getenv("FREQUENCY_PENALTY", "0.0"))
     
     # Database settings
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///llm_cockpit.db")
@@ -102,6 +109,21 @@ class Config:
         
         if not cls.MODELS_DIR.exists():
             cls.MODELS_DIR.mkdir(parents=True, exist_ok=True)
-        
+
         if not cls.CHROMA_PERSIST_DIR.exists():
-            cls.CHROMA_PERSIST_DIR.mkdir(parents=True, exist_ok=True) 
+            cls.CHROMA_PERSIST_DIR.mkdir(parents=True, exist_ok=True)
+
+        if not 0 <= cls.DEFAULT_TEMPERATURE <= 1:
+            raise ValueError("DEFAULT_TEMPERATURE must be between 0 and 1")
+        if not 0 <= cls.DEFAULT_TOP_P <= 1:
+            raise ValueError("DEFAULT_TOP_P must be between 0 and 1")
+        if cls.DEFAULT_TOP_K < 0:
+            raise ValueError("DEFAULT_TOP_K must be non-negative")
+        if cls.DEFAULT_MAX_TOKENS <= 0:
+            raise ValueError("DEFAULT_MAX_TOKENS must be positive")
+        if cls.REPEAT_PENALTY < 0:
+            raise ValueError("REPEAT_PENALTY must be non-negative")
+        if cls.PRESENCE_PENALTY < 0:
+            raise ValueError("PRESENCE_PENALTY must be non-negative")
+        if cls.FREQUENCY_PENALTY < 0:
+            raise ValueError("FREQUENCY_PENALTY must be non-negative")

@@ -23,7 +23,9 @@ def favicon():
 @bp.route("/")
 def index():
     """Main chat interface."""
-    return render_template("chat.html")
+    from ..config import Config
+
+    return render_template("chat.html", config=Config)
 
 
 @bp.route("/chat/list")

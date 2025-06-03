@@ -244,6 +244,17 @@
 
 {% block scripts %}
 <script>
+// Default generation config from server
+window.defaultConfig = {
+    temperature: {{ config.DEFAULT_TEMPERATURE }},
+    top_p: {{ config.DEFAULT_TOP_P }},
+    top_k: {{ config.DEFAULT_TOP_K }},
+    max_tokens: {{ config.DEFAULT_MAX_TOKENS }},
+    repeat_penalty: {{ config.REPEAT_PENALTY }},
+    presence_penalty: {{ config.PRESENCE_PENALTY }},
+    frequency_penalty: {{ config.FREQUENCY_PENALTY }}
+};
+
 function chatInterface() {
     return {
         messages: [],
@@ -298,6 +309,12 @@ function chatInterface() {
             this.isStreaming = true;
             
             try {
+                const systemPrompt = document.getElementById('system-prompt')?.value.trim();
+                const payloadMessages = this.messages.map(m => ({ role: m.role, content: m.content }));
+                if (systemPrompt) {
+                    payloadMessages.unshift({ role: 'system', content: systemPrompt });
+                }
+
                 const response = await fetch('/api/v1/chat/completions', {
                     method: 'POST',
                     headers: {
@@ -305,13 +322,15 @@ function chatInterface() {
                     },
                     body: JSON.stringify({
                         model: this.currentModel,
-                        messages: this.messages.map(m => ({
-                            role: m.role,
-                            content: m.content
-                        })),
+                        messages: payloadMessages,
                         stream: true,
                         temperature: parseFloat(document.getElementById('temperature-range')?.value || 0.7),
+                        top_p: parseFloat(document.getElementById('top-p-range')?.value || 0.95),
+                        top_k: parseInt(document.getElementById('top-k')?.value || 40),
                         max_tokens: parseInt(document.getElementById('max-tokens')?.value || 2048),
+                        repeat_penalty: parseFloat(document.getElementById('repeat-penalty')?.value || 1.1),
+                        presence_penalty: parseFloat(document.getElementById('presence-penalty')?.value || 0.0),
+                        frequency_penalty: parseFloat(document.getElementById('frequency-penalty')?.value || 0.0),
                         rag_files: this.ragFiles.map(f => f.id)
                     })
                 });

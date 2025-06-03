@@ -217,19 +217,68 @@
                 <div class="form-control mb-3">
                     <label class="label">
                         <span class="label-text">Temperature</span>
-                        <span class="label-text-alt" id="temp-value">0.7</span>
+                        <span class="label-text-alt" id="temp-value">{{ config.DEFAULT_TEMPERATURE }}</span>
                     </label>
-                    <input type="range" min="0" max="2" step="0.1" value="0.7" 
+                    <input type="range" min="0" max="2" step="0.1" value="{{ config.DEFAULT_TEMPERATURE }}"
                            class="range range-sm" id="temperature-range">
                 </div>
-                
+
+                <!-- Top P -->
+                <div class="form-control mb-3">
+                    <label class="label">
+                        <span class="label-text">Top P</span>
+                        <span class="label-text-alt" id="top-p-value">{{ config.DEFAULT_TOP_P }}</span>
+                    </label>
+                    <input type="range" min="0" max="1" step="0.01" value="{{ config.DEFAULT_TOP_P }}"
+                           class="range range-sm" id="top-p-range">
+                </div>
+
+                <!-- Top K -->
+                <div class="form-control mb-3">
+                    <label class="label">
+                        <span class="label-text">Top K</span>
+                    </label>
+                    <input type="number" value="{{ config.DEFAULT_TOP_K }}" min="0" max="100"
+                           class="input input-bordered input-sm" id="top-k">
+                </div>
+
                 <!-- Max Tokens -->
                 <div class="form-control mb-3">
                     <label class="label">
                         <span class="label-text">Max Tokens</span>
                     </label>
-                    <input type="number" value="2048" min="1" max="8192"
+                    <input type="number" value="{{ config.DEFAULT_MAX_TOKENS }}" min="1" max="8192"
                            class="input input-bordered input-sm" id="max-tokens">
+                </div>
+
+                <!-- Repeat Penalty -->
+                <div class="form-control mb-3">
+                    <label class="label">
+                        <span class="label-text">Repeat Penalty</span>
+                        <span class="label-text-alt" id="repeat-penalty-value">{{ config.REPEAT_PENALTY }}</span>
+                    </label>
+                    <input type="range" min="0" max="2" step="0.1" value="{{ config.REPEAT_PENALTY }}"
+                           class="range range-sm" id="repeat-penalty">
+                </div>
+
+                <!-- Presence Penalty -->
+                <div class="form-control mb-3">
+                    <label class="label">
+                        <span class="label-text">Presence Penalty</span>
+                        <span class="label-text-alt" id="presence-penalty-value">{{ config.PRESENCE_PENALTY }}</span>
+                    </label>
+                    <input type="range" min="0" max="2" step="0.1" value="{{ config.PRESENCE_PENALTY }}"
+                           class="range range-sm" id="presence-penalty">
+                </div>
+
+                <!-- Frequency Penalty -->
+                <div class="form-control mb-3">
+                    <label class="label">
+                        <span class="label-text">Frequency Penalty</span>
+                        <span class="label-text-alt" id="frequency-penalty-value">{{ config.FREQUENCY_PENALTY }}</span>
+                    </label>
+                    <input type="range" min="0" max="2" step="0.1" value="{{ config.FREQUENCY_PENALTY }}"
+                           class="range range-sm" id="frequency-penalty">
                 </div>
                 
                 <!-- System Prompt -->
