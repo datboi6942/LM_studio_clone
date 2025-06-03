@@ -147,6 +147,9 @@ class ModelRegistry:
             config["path"] = str(model_path)
         
         # Create model runner
+        if model_id in self.models:
+            logger.info("Model already registered", model_id=model_id)
+            return
         runner = LlamaCppRunner(**config)
         self.models[model_id] = runner
         
