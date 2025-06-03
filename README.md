@@ -18,6 +18,7 @@ A powerful local LLM interface that runs GGUF/Safetensors models with GPU accele
 - 📚 RAG pipeline with persistent vector DB
 - 🔌 Plugin system via Python entry-points
 - 🤖 Agent orchestration playground
+- 🎛️ Fine-grained generation controls (temperature, penalties, etc.) adjustable from the web UI
 
 ## Installation
 
@@ -125,10 +126,20 @@ HOST=127.0.0.1
 PORT=8000
 MODELS_DIR=./models
 DEFAULT_MODEL=qwen2-7b-instruct
+DEFAULT_TEMPERATURE=0.7
+DEFAULT_TOP_P=0.95
+DEFAULT_TOP_K=40
+DEFAULT_MAX_TOKENS=2048
+REPEAT_PENALTY=1.1
+PRESENCE_PENALTY=0.0
+FREQUENCY_PENALTY=0.0
 GPU_MONITOR_INTERVAL=1
 LOG_LEVEL=INFO
 PUBLIC_MODE=False
 ```
+
+These values serve as defaults. You can adjust them at runtime from the sidebar
+"Settings" panel without editing the `.env` file.
 
 ## Model Configuration
 

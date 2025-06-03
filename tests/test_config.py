@@ -50,4 +50,26 @@ def test_config_validate_public_mode_security(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(Config, "SECRET_KEY", "dev-secret-key-change-in-production")
     
     with pytest.raises(ValueError, match="SECRET_KEY must be changed"):
-        Config.validate() 
+        Config.validate()
+
+
+def test_config_validate_generation_ranges(monkeypatch: pytest.MonkeyPatch):
+    """Ensure generation defaults are validated."""
+    monkeypatch.setattr(Config, "DEFAULT_TEMPERATURE", 1.5)
+    with pytest.raises(ValueError):
+        Config.validate()
+
+    monkeypatch.setattr(Config, "DEFAULT_TEMPERATURE", 0.5)
+    monkeypatch.setattr(Config, "DEFAULT_TOP_P", -0.1)
+    with pytest.raises(ValueError):
+        Config.validate()
+
+    monkeypatch.setattr(Config, "DEFAULT_TOP_P", 0.5)
+    monkeypatch.setattr(Config, "DEFAULT_TOP_K", -1)
+    with pytest.raises(ValueError):
+        Config.validate()
+
+    monkeypatch.setattr(Config, "DEFAULT_TOP_K", 40)
+    monkeypatch.setattr(Config, "REPEAT_PENALTY", -0.2)
+    with pytest.raises(ValueError):
+        Config.validate()

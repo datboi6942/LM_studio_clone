@@ -67,11 +67,17 @@ def chat_completions() -> Any:
             return jsonify({"error": "No model specified"}), 400
         
         # Generation parameters
+        from ..config import Config
+
         kwargs = {
-            "temperature": data.get("temperature", 0.7),
-            "top_p": data.get("top_p", 0.95),
-            "top_k": data.get("top_k", 40),
-            "max_tokens": data.get("max_tokens", 2048),
+            "temperature": data.get("temperature", Config.DEFAULT_TEMPERATURE),
+            "top_p": data.get("top_p", Config.DEFAULT_TOP_P),
+            "top_k": data.get("top_k", Config.DEFAULT_TOP_K),
+            "max_tokens": data.get("max_tokens", Config.DEFAULT_MAX_TOKENS),
+            "repeat_penalty": data.get("repeat_penalty", Config.REPEAT_PENALTY),
+            "presence_penalty": data.get("presence_penalty", Config.PRESENCE_PENALTY),
+            "frequency_penalty": data.get("frequency_penalty", Config.FREQUENCY_PENALTY),
+            "stop": data.get("stop"),
         }
         
         # Get model

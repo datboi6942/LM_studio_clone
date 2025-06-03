@@ -123,11 +123,85 @@ class LLMCockpit {
         // Temperature range slider
         const tempRange = document.getElementById('temperature-range');
         const tempValue = document.getElementById('temp-value');
-        
+
         if (tempRange && tempValue) {
+            tempRange.value = this.settings.temperature;
+            tempValue.textContent = this.settings.temperature;
             tempRange.addEventListener('input', (e) => {
                 tempValue.textContent = e.target.value;
                 this.settings.temperature = parseFloat(e.target.value);
+                this.saveSettings();
+            });
+        }
+
+        // Top P slider
+        const topPRange = document.getElementById('top-p-range');
+        const topPValue = document.getElementById('top-p-value');
+        if (topPRange && topPValue) {
+            topPRange.value = this.settings.topP;
+            topPValue.textContent = this.settings.topP;
+            topPRange.addEventListener('input', (e) => {
+                topPValue.textContent = e.target.value;
+                this.settings.topP = parseFloat(e.target.value);
+                this.saveSettings();
+            });
+        }
+
+        // Top K input
+        const topKInput = document.getElementById('top-k');
+        if (topKInput) {
+            topKInput.value = this.settings.topK;
+            topKInput.addEventListener('change', (e) => {
+                this.settings.topK = parseInt(e.target.value, 10);
+                this.saveSettings();
+            });
+        }
+
+        // Max tokens input
+        const maxTokensInput = document.getElementById('max-tokens');
+        if (maxTokensInput) {
+            maxTokensInput.value = this.settings.maxTokens;
+            maxTokensInput.addEventListener('change', (e) => {
+                this.settings.maxTokens = parseInt(e.target.value, 10);
+                this.saveSettings();
+            });
+        }
+
+        // Repeat penalty slider
+        const repeatPenaltyRange = document.getElementById('repeat-penalty');
+        const repeatPenaltyValue = document.getElementById('repeat-penalty-value');
+        if (repeatPenaltyRange && repeatPenaltyValue) {
+            repeatPenaltyRange.value = this.settings.repeatPenalty;
+            repeatPenaltyValue.textContent = this.settings.repeatPenalty;
+            repeatPenaltyRange.addEventListener('input', (e) => {
+                repeatPenaltyValue.textContent = e.target.value;
+                this.settings.repeatPenalty = parseFloat(e.target.value);
+                this.saveSettings();
+            });
+        }
+
+        // Presence penalty slider
+        const presencePenaltyRange = document.getElementById('presence-penalty');
+        const presencePenaltyValue = document.getElementById('presence-penalty-value');
+        if (presencePenaltyRange && presencePenaltyValue) {
+            presencePenaltyRange.value = this.settings.presencePenalty;
+            presencePenaltyValue.textContent = this.settings.presencePenalty;
+            presencePenaltyRange.addEventListener('input', (e) => {
+                presencePenaltyValue.textContent = e.target.value;
+                this.settings.presencePenalty = parseFloat(e.target.value);
+                this.saveSettings();
+            });
+        }
+
+        // Frequency penalty slider
+        const frequencyPenaltyRange = document.getElementById('frequency-penalty');
+        const frequencyPenaltyValue = document.getElementById('frequency-penalty-value');
+        if (frequencyPenaltyRange && frequencyPenaltyValue) {
+            frequencyPenaltyRange.value = this.settings.frequencyPenalty;
+            frequencyPenaltyValue.textContent = this.settings.frequencyPenalty;
+            frequencyPenaltyRange.addEventListener('input', (e) => {
+                frequencyPenaltyValue.textContent = e.target.value;
+                this.settings.frequencyPenalty = parseFloat(e.target.value);
                 this.saveSettings();
             });
         }
@@ -322,10 +396,16 @@ class LLMCockpit {
     
     // Settings Management
     loadSettings() {
+        const cfg = window.defaultConfig || {};
         const defaultSettings = {
             theme: 'dark',
-            temperature: 0.7,
-            maxTokens: 2048,
+            temperature: cfg.temperature || 0.7,
+            topP: cfg.top_p || 0.95,
+            topK: cfg.top_k || 40,
+            maxTokens: cfg.max_tokens || 2048,
+            repeatPenalty: cfg.repeat_penalty || 1.1,
+            presencePenalty: cfg.presence_penalty || 0.0,
+            frequencyPenalty: cfg.frequency_penalty || 0.0,
             ragEnabled: false,
             voiceEnabled: false,
             autoSave: true,
