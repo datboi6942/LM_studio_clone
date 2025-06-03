@@ -113,6 +113,12 @@ class Config:
         if not cls.CHROMA_PERSIST_DIR.exists():
             cls.CHROMA_PERSIST_DIR.mkdir(parents=True, exist_ok=True)
 
+        # Ensure database directory exists
+        if cls.DATABASE_URL.startswith("sqlite:///"):
+            db_path = Path(cls.DATABASE_URL.replace("sqlite:///", ""))
+            if not db_path.parent.exists():
+                db_path.parent.mkdir(parents=True, exist_ok=True)
+
         if not 0 <= cls.DEFAULT_TEMPERATURE <= 1:
             raise ValueError("DEFAULT_TEMPERATURE must be between 0 and 1")
         if not 0 <= cls.DEFAULT_TOP_P <= 1:

@@ -261,6 +261,7 @@ function chatInterface() {
         currentMessage: '',
         currentModel: '',
         chatTitle: '',
+        chatId: null,
         isStreaming: false,
         isRecording: false,
         voiceEnabled: false,
@@ -277,6 +278,7 @@ function chatInterface() {
             // Load current chat if specified
             const chatId = new URLSearchParams(window.location.search).get('id');
             if (chatId) {
+                this.chatId = parseInt(chatId);
                 this.loadChat(chatId);
             }
             
@@ -331,7 +333,8 @@ function chatInterface() {
                         repeat_penalty: parseFloat(document.getElementById('repeat-penalty')?.value || 1.1),
                         presence_penalty: parseFloat(document.getElementById('presence-penalty')?.value || 0.0),
                         frequency_penalty: parseFloat(document.getElementById('frequency-penalty')?.value || 0.0),
-                        rag_files: this.ragFiles.map(f => f.id)
+                        rag_files: this.ragFiles.map(f => f.id),
+                        chat_id: this.chatId
                     })
                 });
                 
@@ -484,6 +487,7 @@ function chatInterface() {
             try {
                 const response = await fetch(`/api/chat/${chatId}`);
                 const data = await response.json();
+                this.chatId = data.id;
                 this.messages = data.messages;
                 this.chatTitle = data.title;
                 this.ragFiles = data.rag_files || [];

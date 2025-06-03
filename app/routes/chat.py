@@ -9,6 +9,7 @@ import os
 import subprocess
 import threading
 import structlog
+from flask import current_app
 from ..services.model_registry import ModelRegistry
 
 bp = Blueprint("chat", __name__, url_prefix="/")
@@ -32,21 +33,14 @@ def index():
 def list_chats():
     """Get chat list for sidebar."""
     folder = request.args.get("folder", "")
-    
-    # Return empty list since we don't have a database yet
-    # In a real implementation, this would query the database
-    chats: List[Dict[str, Any]] = []
-    
+    chats = current_app.chat_store.list_chats(folder)
     return render_template("components/chat_list.html", chats=chats)
 
 
 @bp.route("/chat/folders")
 def list_folders():
     """Get folder list for sidebar."""
-    # Return empty list since we don't have a database yet
-    # In a real implementation, this would query the database
-    folders: List[Dict[str, Any]] = []
-    
+    folders = current_app.chat_store.list_folders()
     return render_template("components/folder_list.html", folders=folders)
 
 
@@ -55,22 +49,22 @@ def search_chats():
     """Search chats."""
     query = request.args.get("q", "")
     folder = request.args.get("folder", "")
-    
-    # Return empty results since we don't have a database yet
-    chats: List[Dict[str, Any]] = []
-    
+    chats = current_app.chat_store.search_chats(query, folder)
     return render_template("components/chat_list.html", chats=chats)
 
 
 @bp.route("/chat/create", methods=["POST"])
 def create_chat():
     """Create a new chat."""
-    # For now, just reload the page to start a new chat
-    return jsonify({
-        "success": True,
-        "chat_id": None,
-        "redirect": "/"
-    })
+    chat_id = current_app.chat_store.create_chat()
+    return jsonify({"success": True, "chat_id": chat_id})
+
+
+@bp.route("/chat/<int:chat_id>/delete", methods=["POST"])
+def delete_chat(chat_id: int):
+    """Delete a chat."""
+    current_app.chat_store.delete_chat(chat_id)
+    return jsonify({"success": True})
 
 
 @bp.route("/chat/folder/create", methods=["POST"])
@@ -89,14 +83,9 @@ def create_folder():
 @bp.route("/api/chat/<int:chat_id>")
 def get_chat(chat_id):
     """Get chat details."""
-    # Return empty chat since we don't have persistence yet
-    chat = {
-        "id": chat_id,
-        "title": "New Chat",
-        "messages": [],
-        "rag_files": []
-    }
-    
+    chat = current_app.chat_store.get_chat(chat_id)
+    if not chat:
+        return jsonify({"error": "Chat not found"}), 404
     return jsonify(chat)
 
 

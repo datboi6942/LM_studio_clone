@@ -324,11 +324,13 @@ function setActiveFolder(element) {
 }
 
 function newChat() {
-    // Create new chat
-    htmx.ajax('POST', '/chat/create', {
-        target: '#main-content',
-        swap: 'innerHTML'
-    });
+    fetch('/chat/create', { method: 'POST' })
+        .then(res => res.json())
+        .then(data => {
+            if (data.chat_id) {
+                window.location = `/?id=${data.chat_id}`;
+            }
+        });
 }
 
 function setCurrentModel(modelName) {

@@ -2,6 +2,7 @@
 
 import structlog
 from flask import Flask
+from pathlib import Path
 from flask_socketio import SocketIO
 
 from .config import Config
@@ -41,14 +42,18 @@ def create_app(config_override: dict | None = None) -> Flask:
     socketio.init_app(app, cors_allowed_origins="*" if Config.PUBLIC_MODE else None)
     
     # Register blueprints
-    from .routes import api, chat, admin
+    from .routes import api, chat
     app.register_blueprint(api.bp)
     app.register_blueprint(chat.bp)
-    app.register_blueprint(admin.bp)
     
     # Initialize model registry
     from .services.model_registry import ModelRegistry
     app.model_registry = ModelRegistry()
+
+    # Initialize chat store using SQLite
+    from .services.chat_store import ChatStore
+    db_path = Path(Config.DATABASE_URL.replace("sqlite:///", ""))
+    app.chat_store = ChatStore(db_path)
     
     # Load models on startup
     with app.app_context():

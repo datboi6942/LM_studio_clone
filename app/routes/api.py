@@ -57,6 +57,7 @@ def chat_completions() -> Any:
         model_id = data.get("model")
         messages = data.get("messages", [])
         stream = data.get("stream", False)
+        chat_id = data.get("chat_id")
         
         # Debug logging
         logger.info("Chat completion request", model_id=model_id, messages_count=len(messages), stream=stream)
@@ -91,16 +92,27 @@ def chat_completions() -> Any:
         if not model.is_loaded:
             logger.info("Auto-loading model", model_id=model_id)
             model.load()
+
+        if chat_id and messages:
+            last = messages[-1]
+            if last.get("role") == "user":
+                current_app.chat_store.add_message(chat_id, "user", last.get("content", ""))
         
         # Generate response
         if stream:
             def generate() -> Iterator[str]:
                 try:
+                    assistant_text = ""
                     for chunk in model.chat(messages, stream=True, **kwargs):
                         # Send the chunk immediately with proper SSE format
                         yield f"data: {json.dumps(chunk)}\n\n"
+                        delta = chunk.get("choices", [{}])[0].get("delta", {}).get("content")
+                        if delta:
+                            assistant_text += delta
                     # Send a final [DONE] message to indicate completion
                     yield "data: [DONE]\n\n"
+                    if chat_id and assistant_text:
+                        current_app.chat_store.add_message(chat_id, "assistant", assistant_text)
                 except Exception as e:
                     logger.error("Streaming error", error=str(e))
                     yield f"data: {json.dumps({'error': str(e)})}\n\n"
@@ -121,6 +133,10 @@ def chat_completions() -> Any:
             # Non-streaming response
             chunks = list(model.chat(messages, stream=False, **kwargs))
             if chunks:
+                if chat_id:
+                    assistant_content = chunks[-1].get("choices", [{}])[0].get("message", {}).get("content", "")
+                    if assistant_content:
+                        current_app.chat_store.add_message(chat_id, "assistant", assistant_content)
                 return jsonify(chunks[-1])
             else:
                 return jsonify({"error": "No response generated"}), 500
