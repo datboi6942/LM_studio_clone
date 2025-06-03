@@ -2,7 +2,7 @@
 
 import logging
 import sys
-from typing import Any, Dict, Literal
+from typing import Literal
 
 import structlog
 
@@ -12,7 +12,7 @@ def setup_logging(
     format_type: Literal["json", "console"] = "console"
 ) -> None:
     """Configure structured logging.
-    
+
     Args:
         level: Log level.
         format_type: Output format (json for production, console for dev).
@@ -23,7 +23,7 @@ def setup_logging(
         stream=sys.stdout,
         level=getattr(logging, level)
     )
-    
+
     # Processors for structlog
     shared_processors = [
         structlog.stdlib.add_logger_name,
@@ -33,12 +33,12 @@ def setup_logging(
         structlog.processors.format_exc_info,
         structlog.processors.UnicodeDecoder(),
     ]
-    
+
     if format_type == "json":
         renderer = structlog.processors.JSONRenderer()
     else:
         renderer = structlog.dev.ConsoleRenderer(colors=True)
-    
+
     structlog.configure(
         processors=shared_processors + [
             structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
@@ -47,16 +47,16 @@ def setup_logging(
         logger_factory=structlog.stdlib.LoggerFactory(),
         cache_logger_on_first_use=True,
     )
-    
+
     # Configure formatter for stdlib logging
     formatter = structlog.stdlib.ProcessorFormatter(
         processor=renderer,
         foreign_pre_chain=shared_processors,
     )
-    
+
     handler = logging.StreamHandler()
     handler.setFormatter(formatter)
-    
+
     root_logger = logging.getLogger()
     root_logger.handlers = [handler]
-    root_logger.setLevel(getattr(logging, level)) 
+    root_logger.setLevel(getattr(logging, level))
