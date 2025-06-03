@@ -6,7 +6,7 @@ from typing import Any, Dict, Iterator, Optional
 import structlog
 from flask import Blueprint, Response, current_app, jsonify, request
 
-from ..models import CompletionChunk
+from app.models import CompletionChunk
 
 logger = structlog.get_logger(__name__)
 

@@ -7,8 +7,8 @@ import re
 
 import structlog
 
-from ..config import Config
-from ..models import BaseModelRunner, LlamaCppRunner
+from app.config import Config
+from app.models import BaseModelRunner, LlamaCppRunner
 
 logger = structlog.get_logger(__name__)
 
