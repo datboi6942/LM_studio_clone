@@ -127,3 +127,9 @@ class Config:
             raise ValueError("PRESENCE_PENALTY must be non-negative")
         if cls.FREQUENCY_PENALTY < 0:
             raise ValueError("FREQUENCY_PENALTY must be non-negative")
+        if cls.CHUNK_SIZE <= 0:
+            raise ValueError("CHUNK_SIZE must be positive")
+        if cls.CHUNK_OVERLAP < 0:
+            raise ValueError("CHUNK_OVERLAP must be non-negative")
+        if cls.CHUNK_OVERLAP >= cls.CHUNK_SIZE:
+            raise ValueError("CHUNK_OVERLAP must be smaller than CHUNK_SIZE")

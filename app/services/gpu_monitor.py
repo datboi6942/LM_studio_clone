@@ -92,13 +92,13 @@ class GPUMonitor:
             # Memory info
             mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
             memory_used_mb = mem_info.used // (1024 ** 2)
-            memory_total_mb = mem_info.total // (1024 ** 2)
-            memory_percent = (mem_info.used / mem_info.total) * 100
+            memory_total_mb = max(mem_info.total, 1) // (1024 ** 2)
+            memory_percent = (mem_info.used / max(mem_info.total, 1)) * 100
             
             # Temperature
             try:
                 temperature = pynvml.nvmlDeviceGetTemperature(handle, pynvml.NVML_TEMPERATURE_GPU)
-            except:
+            except Exception:
                 temperature = None
             
             # Utilization
@@ -106,14 +106,14 @@ class GPUMonitor:
                 util = pynvml.nvmlDeviceGetUtilizationRates(handle)
                 gpu_util = util.gpu
                 mem_util = util.memory
-            except:
+            except Exception:
                 gpu_util = None
                 mem_util = None
             
             # Power
             try:
                 power = pynvml.nvmlDeviceGetPowerUsage(handle) // 1000  # Convert to watts
-            except:
+            except Exception:
                 power = None
             
             metrics["gpus"].append({

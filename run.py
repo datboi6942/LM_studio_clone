@@ -1,7 +1,6 @@
 """Main entry point for LLM Cockpit."""
 
 import argparse
-import sys
 
 from app import create_app, socketio
 from app.config import Config
@@ -31,20 +30,16 @@ def main() -> None:
         action="store_true",
         help="Enable debug mode"
     )
-    
     args = parser.parse_args()
-    
     # Override config with CLI args
     if args.public:
         Config.PUBLIC_MODE = True
         Config.HOST = "0.0.0.0"
-    
+        args.host = "0.0.0.0"
     if args.debug:
         Config.DEBUG = True
-    
     # Create and run app
     app = create_app()
-    
     # Run with SocketIO for WebSocket support
     socketio.run(
         app,
@@ -54,7 +49,5 @@ def main() -> None:
         use_reloader=Config.DEBUG,
         log_output=True
     )
-
-
 if __name__ == "__main__":
-    main() 
+    main()

@@ -1,15 +1,18 @@
 """Chat UI routes."""
 
-from flask import Blueprint, render_template, request, jsonify, session, send_from_directory, current_app
-from flask_socketio import emit
-import json
-from datetime import datetime
-from typing import List, Dict, Any
 import os
-import subprocess
+import re
 import threading
-import structlog
-from ..services.model_registry import ModelRegistry
+from typing import Any
+
+from flask import (
+    Blueprint,
+    current_app,
+    jsonify,
+    render_template,
+    request,
+    send_from_directory,
+)
 
 bp = Blueprint("chat", __name__, url_prefix="/")
 
@@ -31,12 +34,11 @@ def index():
 @bp.route("/chat/list")
 def list_chats():
     """Get chat list for sidebar."""
-    folder = request.args.get("folder", "")
-    
+
     # Return empty list since we don't have a database yet
     # In a real implementation, this would query the database
-    chats: List[Dict[str, Any]] = []
-    
+    chats: list[dict[str, Any]] = []
+
     return render_template("components/chat_list.html", chats=chats)
 
 
@@ -45,20 +47,18 @@ def list_folders():
     """Get folder list for sidebar."""
     # Return empty list since we don't have a database yet
     # In a real implementation, this would query the database
-    folders: List[Dict[str, Any]] = []
-    
+    folders: list[dict[str, Any]] = []
+
     return render_template("components/folder_list.html", folders=folders)
 
 
 @bp.route("/chat/search")
 def search_chats():
     """Search chats."""
-    query = request.args.get("q", "")
-    folder = request.args.get("folder", "")
-    
+
     # Return empty results since we don't have a database yet
-    chats: List[Dict[str, Any]] = []
-    
+    chats: list[dict[str, Any]] = []
+
     return render_template("components/chat_list.html", chats=chats)
 
 
@@ -77,10 +77,12 @@ def create_chat():
 def create_folder():
     """Create a new folder."""
     name = request.form.get("name", "").strip()
-    
+    if not re.match(r"^[\w\- ]+$", name):
+        return jsonify({"error": "Invalid folder name"}), 400
+
     if not name:
         return jsonify({"error": "Folder name is required"}), 400
-    
+
     # For now, just return the folder (it won't persist)
     folder = {"name": name, "count": 0}
     return render_template("components/folder_item.html", folder=folder)
@@ -96,7 +98,7 @@ def get_chat(chat_id):
         "messages": [],
         "rag_files": []
     }
-    
+
     return jsonify(chat)
 
 
@@ -106,7 +108,7 @@ def get_models():
     try:
         model_registry = current_app.model_registry
         models_info = model_registry.list_models()
-        
+
         # Convert to the format expected by the frontend
         models = []
         for model_id, info in models_info.items():
@@ -119,9 +121,9 @@ def get_models():
                 "loaded": info.get("loaded", False),
                 "active": info.get("active", False)
             })
-        
+
         return jsonify(models)
-    
+
     except Exception as e:
         current_app.logger.error(f"Failed to get models: {e}")
         return jsonify([]), 500
@@ -134,7 +136,7 @@ def get_model_info(model_name):
         model_registry = current_app.model_registry
         model = model_registry.get_model(model_name)
         info = model.get_model_info()
-        
+
         return jsonify({
             "name": model_name,
             "type": info.get("engine", "unknown"),
@@ -143,13 +145,13 @@ def get_model_info(model_name):
             "loaded": model.is_loaded if hasattr(model, 'is_loaded') else False,
             "memory_usage": info.get("memory_usage", "unknown")
         })
-    
+
     except Exception as e:
         current_app.logger.error(f"Failed to get model info for {model_name}: {e}")
         return jsonify({
             "name": model_name,
             "type": "unknown",
-            "size": "unknown", 
+            "size": "unknown",
             "context_length": 0,
             "loaded": False,
             "memory_usage": "unknown"
@@ -162,7 +164,7 @@ def load_model(model_name):
     try:
         model_registry = current_app.model_registry
         model_registry.load_model(model_name)
-        
+
         # Emit socket event to notify frontend of successful load
         socketio = current_app.extensions.get('socketio')
         if socketio:
@@ -170,25 +172,25 @@ def load_model(model_name):
                 'model_id': model_name,
                 'status': 'loaded'
             })
-        
+
         return jsonify({
-            "success": True, 
+            "success": True,
             "message": f"Model {model_name} loaded successfully",
             "loaded": True
         })
-    
+
     except Exception as e:
         current_app.logger.error(f"Failed to load model {model_name}: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
 
 
-@bp.route("/api/models/<model_name>/unload", methods=["POST"]) 
+@bp.route("/api/models/<model_name>/unload", methods=["POST"])
 def unload_model(model_name):
     """Unload a model."""
     try:
         model_registry = current_app.model_registry
         model_registry.unload_model(model_name)
-        
+
         # Emit socket event to notify frontend of successful unload
         socketio = current_app.extensions.get('socketio')
         if socketio:
@@ -196,13 +198,13 @@ def unload_model(model_name):
                 'model_id': model_name,
                 'status': 'unloaded'
             })
-        
+
         return jsonify({
-            "success": True, 
+            "success": True,
             "message": f"Model {model_name} unloaded successfully",
             "loaded": False
         })
-    
+
     except Exception as e:
         current_app.logger.error(f"Failed to unload model {model_name}: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
@@ -214,7 +216,7 @@ def switch_model(model_name):
     try:
         model_registry = current_app.model_registry
         model_registry.switch_model(model_name)
-        
+
         # Emit socket event to notify frontend of model switch
         socketio = current_app.extensions.get('socketio')
         if socketio:
@@ -222,13 +224,13 @@ def switch_model(model_name):
                 'model_id': model_name,
                 'status': 'active'
             })
-        
+
         return jsonify({
-            "success": True, 
+            "success": True,
             "message": f"Switched to model {model_name}",
             "active": True
         })
-    
+
     except Exception as e:
         current_app.logger.error(f"Failed to switch to model {model_name}: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
@@ -241,11 +243,11 @@ def search_huggingface_models():
         query = request.args.get("q", "").strip()
         if not query:
             return jsonify({"success": False, "error": "Search query is required"}), 400
-        
+
         from huggingface_hub import HfApi, list_repo_files
-        
+
         api = HfApi()
-        
+
         # Search for models
         models = api.list_models(
             search=query,
@@ -253,17 +255,17 @@ def search_huggingface_models():
             limit=10,
             sort="downloads"
         )
-        
+
         results = []
         for model in models:
             try:
                 # Get files in the repository
                 files = list_repo_files(model.id, token=os.getenv("HF_TOKEN"))
-                
+
                 # Find GGUF files and other model files
                 gguf_files = [f for f in files if f.endswith('.gguf')]
                 other_files = [f for f in files if f.endswith(('.safetensors', '.bin', '.pt'))]
-                
+
                 if gguf_files or other_files:
                     # Extract quantization info from GGUF files
                     quantizations = []
@@ -280,16 +282,16 @@ def search_huggingface_models():
                                         size_bytes = file_info[0].size if hasattr(file_info[0], 'size') else None
                                         if size_bytes:
                                             size_mb = f"{size_bytes / (1024*1024):.0f}MB"
-                                except:
+                                except Exception:
                                     pass
-                                
+
                                 quantizations.append({
                                     "name": part.upper(),
                                     "file": gguf_file,
                                     "size": size_mb
                                 })
                                 break
-                    
+
                     # If no GGUF files, check if it's convertible
                     if not quantizations and other_files:
                         quantizations.append({
@@ -297,7 +299,7 @@ def search_huggingface_models():
                             "file": "convert",
                             "size": "Will convert"
                         })
-                    
+
                     if quantizations:
                         results.append({
                             "id": model.id,
@@ -307,16 +309,16 @@ def search_huggingface_models():
                             "description": getattr(model, 'card_data', {}).get('description', '') if hasattr(model, 'card_data') and model.card_data else '',
                             "quantizations": quantizations[:5]  # Limit to top 5 quantizations
                         })
-                        
+
             except Exception as e:
                 current_app.logger.warning(f"Failed to get files for model {model.id}: {e}")
                 continue
-        
+
         return jsonify({
             "success": True,
             "models": results[:10]  # Limit to top 10 results
         })
-        
+
     except Exception as e:
         current_app.logger.error(f"Failed to search HuggingFace: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
@@ -329,24 +331,29 @@ def download_model():
         data = request.json
         model_name = data.get("model_name")
         specific_file = data.get("file")  # Specific file to download
+        if model_name and (".." in model_name or model_name.startswith("/")):
+            return jsonify({"success": False, "error": "Invalid model name"}), 400
+        if specific_file and (".." in specific_file or specific_file.startswith("/")):
+            return jsonify({"success": False, "error": "Invalid file name"}), 400
         quantization = data.get("quantization", "Q4_K_M")  # Fallback quantization
-        
+
         if not model_name:
             return jsonify({"success": False, "error": "Model name is required"}), 400
-        
+
         # Get the current app for context (fix Flask context issue)
         app = current_app._get_current_object()
-        
+
         # Start download in background
         def download_task():
             try:
                 # Import download function
                 import sys
                 from pathlib import Path
+
                 from huggingface_hub import hf_hub_download
-                
+
                 app.logger.info(f"Starting download of {model_name}, file: {specific_file}")
-                
+
                 if specific_file and specific_file != "convert":
                     # Download specific file
                     try:
@@ -358,7 +365,7 @@ def download_model():
                         )
                         model_path = Path(local_file)
                         app.logger.info(f"Downloaded specific file to: {model_path}")
-                        
+
                     except Exception as e:
                         app.logger.error(f"Failed to download specific file: {e}")
                         return
@@ -366,37 +373,37 @@ def download_model():
                     # Fallback to old method for conversion
                     project_root = Path(__file__).parent.parent.parent
                     sys.path.insert(0, str(project_root))
-                    
+
                     from download_model import download_model as dl_model
                     model_path = dl_model(model_name, quantization=quantization)
-                
+
                 if model_path and model_path.exists():
                     app.logger.info(f"Model {model_name} downloaded successfully to {model_path}")
-                    
+
                     # Since we now have dynamic model discovery, just reload the registry
                     # No need to update config files manually
                     with app.app_context():
                         try:
                             app.model_registry.reload_models()
-                            app.logger.info(f"Model registry reloaded, new model should be available")
+                            app.logger.info("Model registry reloaded, new model should be available")
                         except Exception as e:
                             app.logger.error(f"Failed to reload model registry: {e}")
                 else:
                     app.logger.error(f"Download completed but model file not found: {model_path}")
-                    
+
             except Exception as e:
                 app.logger.error(f"Download error for model {model_name}: {e}")
-        
+
         # Start download in background thread
         thread = threading.Thread(target=download_task)
         thread.daemon = True
         thread.start()
-        
+
         return jsonify({
-            "success": True, 
+            "success": True,
             "message": f"Started downloading {model_name} ({specific_file if specific_file else 'auto-convert'}). The model will appear in the dropdown once download completes."
         })
-    
+
     except Exception as e:
         current_app.logger.error(f"Failed to start download: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
@@ -408,7 +415,7 @@ def refresh_models():
     try:
         current_app.model_registry.reload_models()
         return jsonify({
-            "success": True, 
+            "success": True,
             "message": "Models refreshed successfully"
         })
     except Exception as e:
@@ -428,17 +435,17 @@ def get_available_models():
             "description": "Conversational model, good for chat"
         },
         {
-            "name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0", 
+            "name": "TinyLlama/TinyLlama-1.1B-Chat-v1.0",
             "display_name": "TinyLlama 1.1B Chat",
             "size": "2.2GB",
             "description": "Small but capable chat model"
         },
         {
             "name": "microsoft/DialoGPT-small",
-            "display_name": "DialoGPT Small", 
+            "display_name": "DialoGPT Small",
             "size": "500MB",
             "description": "Lightweight conversational model"
         }
     ]
-    
-    return jsonify(available_models) 
+
+    return jsonify(available_models)
