@@ -134,6 +134,7 @@ cython_debug/
 
 # Project specific
 models/
+!app/models/
 chroma_db/
 llm_cockpit.db
 *.gguf
