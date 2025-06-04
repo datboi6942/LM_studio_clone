@@ -1,6 +1,7 @@
 """OpenAI-compatible API routes."""
 
 import json
+import threading
 from typing import Any, Dict, Iterator, Optional
 
 import structlog
@@ -11,6 +12,10 @@ from app.models import CompletionChunk
 logger = structlog.get_logger(__name__)
 
 bp = Blueprint("api", __name__, url_prefix="/api")
+
+# Track active generation sessions for cancellation
+active_generations = {}
+generation_lock = threading.Lock()
 
 
 def make_sse(data: Dict[str, Any]) -> str:
@@ -107,27 +112,47 @@ def chat_completions() -> Any:
         # Generate response
         if stream:
             def generate() -> Iterator[str]:
+                # Create a unique session ID for this generation
+                import uuid
+                session_id = str(uuid.uuid4())
+                stop_event = threading.Event()
+                
+                # Register this generation session
+                with generation_lock:
+                    active_generations[session_id] = stop_event
+                
                 try:
-                    logger.info("=== ROUTE GENERATE START ===")
-                    logger.info("Starting streaming generation in route", model_id=model_id, messages_count=len(messages))
+                    logger.info("=== ROUTE GENERATE START ===", session_id=session_id)
+                    logger.info("Starting streaming generation in route", model_id=model_id, messages_count=len(messages), session_id=session_id)
                     logger.info("About to call model.chat", model=model, is_loaded=model.is_loaded)
                     
                     chunk_count = 0
                     for chunk in model.chat(messages, stream=True, **kwargs):
+                        # Check if generation should be stopped
+                        if stop_event.is_set():
+                            logger.info("Generation stopped by user", session_id=session_id, chunk_count=chunk_count)
+                            yield f"data: {json.dumps({'choices': [{'message': {'content': ''}, 'finish_reason': 'stop'}]})}\n\n"
+                            yield "data: [DONE]\n\n"
+                            return
+                        
                         chunk_count += 1
                         # Log what we're sending
-                        logger.info(f"Route received chunk #{chunk_count}", chunk=chunk)
+                        logger.info(f"Route received chunk #{chunk_count}", chunk=chunk, session_id=session_id)
                         # Send the chunk immediately with proper SSE format
                         sse_data = f"data: {json.dumps(chunk)}\n\n"
                         logger.info(f"Route sending SSE data: {sse_data.strip()}")
                         yield sse_data
                     # Send a final [DONE] message to indicate completion
-                    logger.info(f"Route stream completed with {chunk_count} chunks")
+                    logger.info(f"Route stream completed with {chunk_count} chunks", session_id=session_id)
                     yield "data: [DONE]\n\n"
                     logger.info("=== ROUTE GENERATE END ===")
                 except Exception as e:
-                    logger.error("Route streaming error", error=str(e), exc_info=True)
+                    logger.error("Route streaming error", error=str(e), exc_info=True, session_id=session_id)
                     yield f"data: {json.dumps({'error': str(e)})}\n\n"
+                finally:
+                    # Clean up the session
+                    with generation_lock:
+                        active_generations.pop(session_id, None)
             
             response = Response(
                 generate(),
@@ -186,6 +211,32 @@ def switch_model() -> Any:
         return jsonify({"status": "switched", "model": data["model"]})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@bp.route("/v1/chat/stop", methods=["POST"])
+def stop_generation() -> Any:
+    """Stop an active generation."""
+    data = request.json
+    session_id = data.get("session_id") if data else None
+    
+    # If no session_id provided, stop all active generations
+    if not session_id:
+        with generation_lock:
+            for sid, stop_event in active_generations.items():
+                stop_event.set()
+                logger.info("Stopping generation", session_id=sid)
+            active_generations.clear()
+        return jsonify({"status": "stopped", "message": "All generations stopped"})
+    
+    # Stop specific session
+    with generation_lock:
+        if session_id in active_generations:
+            active_generations[session_id].set()
+            del active_generations[session_id]
+            logger.info("Stopping generation", session_id=session_id)
+            return jsonify({"status": "stopped", "session_id": session_id})
+        else:
+            return jsonify({"error": "Session not found"}), 404
 
 
 @bp.route("/health", methods=["GET"])

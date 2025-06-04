@@ -229,6 +229,30 @@ pre code {
     opacity: 1;
 }
 
+/* Stop button styles */
+.btn-error {
+    background-color: #dc2626;
+    border-color: #dc2626;
+    color: white;
+}
+
+.btn-error:hover {
+    background-color: #b91c1c;
+    border-color: #b91c1c;
+    transform: translateY(-1px);
+}
+
+.btn-error:active {
+    background-color: #991b1b;
+    border-color: #991b1b;
+    transform: translateY(0);
+}
+
+/* Send/Stop button transitions */
+.btn[x-show] {
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
 /* Loading states */
 .loading-skeleton {
     background: linear-gradient(90deg, 

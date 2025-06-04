@@ -218,21 +218,36 @@
                      x-text="`${currentMessage.length} chars`"></div>
             </div>
             
-            <!-- Send Button -->
-            <button @click="sendMessage()" 
-                    :disabled="!currentMessage.trim() || isStreaming || !currentModel"
+            <!-- Send/Stop Button -->
+            <button x-show="!isStreaming" 
+                    @click="sendMessage()" 
+                    :disabled="!currentMessage.trim() || !currentModel"
                     class="btn btn-primary">
-                <svg x-show="!isStreaming" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
                 </svg>
-                <span x-show="isStreaming" class="loading loading-spinner loading-sm"></span>
+            </button>
+            
+            <!-- Stop Button -->
+            <button x-show="isStreaming" 
+                    @click="stopGeneration()" 
+                    class="btn btn-error">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 6h12v12H6z"></path>
+                </svg>
+                <span class="ml-1">Stop</span>
             </button>
         </div>
         
         <!-- Input Help -->
         <div class="text-xs opacity-50 mt-2">
-            Press <kbd class="kbd kbd-xs">Shift</kbd> + <kbd class="kbd kbd-xs">Enter</kbd> for new line, 
-            <kbd class="kbd kbd-xs">Ctrl</kbd> + <kbd class="kbd kbd-xs">Enter</kbd> to send
+            <span x-show="!isStreaming">
+                Press <kbd class="kbd kbd-xs">Shift</kbd> + <kbd class="kbd kbd-xs">Enter</kbd> for new line, 
+                <kbd class="kbd kbd-xs">Ctrl</kbd> + <kbd class="kbd kbd-xs">Enter</kbd> to send
+            </span>
+            <span x-show="isStreaming" class="text-warning">
+                Press <kbd class="kbd kbd-xs">Esc</kbd> or click Stop to interrupt generation
+            </span>
         </div>
     </div>
 </div>
@@ -267,6 +282,7 @@ function chatInterface() {
         ragEnabled: false,
         ragFiles: [],
         eventSource: null,
+        abortController: null,
         
         init() {
             // Load settings from localStorage
@@ -288,6 +304,14 @@ function chatInterface() {
                     textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
                 });
             });
+            
+            // Add keyboard shortcut for stopping generation (Escape key)
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape' && this.isStreaming) {
+                    e.preventDefault();
+                    this.stopGeneration();
+                }
+            });
         },
         
         async sendMessage() {
@@ -307,6 +331,9 @@ function chatInterface() {
             
             // Start streaming
             this.isStreaming = true;
+            
+            // Create abort controller for cancelling the request
+            this.abortController = new AbortController();
             
             try {
                 const systemPrompt = document.getElementById('system-prompt')?.value.trim();
@@ -332,7 +359,8 @@ function chatInterface() {
                         presence_penalty: parseFloat(document.getElementById('presence-penalty')?.value || 0.0),
                         frequency_penalty: parseFloat(document.getElementById('frequency-penalty')?.value || 0.0),
                         rag_files: this.ragFiles.map(f => f.id)
-                    })
+                    }),
+                    signal: this.abortController.signal
                 });
                 
                 if (!response.ok) {
@@ -357,6 +385,12 @@ function chatInterface() {
                 
                 const processChunk = async () => {
                     while (true) {
+                        // Check if aborted before reading next chunk
+                        if (this.abortController && this.abortController.signal.aborted) {
+                            console.log('Stream reading aborted');
+                            break;
+                        }
+                        
                         const { done, value } = await reader.read();
                         if (done) {
                             console.log('Stream reading complete');
@@ -431,14 +465,51 @@ function chatInterface() {
                 
             } catch (error) {
                 console.error('Chat error:', error);
-                this.messages.push({
-                    role: 'assistant',
-                    content: `Error: ${error.message}`,
-                    timestamp: new Date()
-                });
+                
+                // Handle abort errors gracefully
+                if (error.name === 'AbortError') {
+                    this.messages.push({
+                        role: 'assistant',
+                        content: '⏹️ Generation stopped by user.',
+                        timestamp: new Date()
+                    });
+                } else {
+                    this.messages.push({
+                        role: 'assistant',
+                        content: `Error: ${error.message}`,
+                        timestamp: new Date()
+                    });
+                }
             } finally {
                 this.isStreaming = false;
+                this.abortController = null;
                 this.scrollToBottom();
+            }
+        },
+        
+        async stopGeneration() {
+            if (this.isStreaming) {
+                console.log('Stopping generation...');
+                
+                // First, try to abort the fetch request
+                if (this.abortController) {
+                    this.abortController.abort();
+                }
+                
+                // Also call the backend stop endpoint as a fallback
+                try {
+                    await fetch('/api/v1/chat/stop', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({})
+                    });
+                } catch (error) {
+                    console.error('Failed to call stop endpoint:', error);
+                }
+                
+                this.showToast('Generation stopped', 'warning');
             }
         },
         
