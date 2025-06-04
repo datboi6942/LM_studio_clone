@@ -1,5 +1,6 @@
 flask==3.*
 flask-socketio==5.*
+flask-cors==4.*
 transformers==4.40.0
 accelerate==0.30.*
 llama-cpp-python[server]==0.2.*

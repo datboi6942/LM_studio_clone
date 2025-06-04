@@ -71,7 +71,7 @@ class Config:
     
     # Logging
     LOG_LEVEL: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = os.getenv(
-        "LOG_LEVEL", "INFO"
+        "LOG_LEVEL", "DEBUG"
     ).upper()  # type: ignore
     LOG_FORMAT: Literal["json", "console"] = os.getenv(
         "LOG_FORMAT", "console" if DEBUG else "json"
@@ -83,6 +83,8 @@ class Config:
     
     # Public exposure
     PUBLIC_MODE: bool = os.getenv("PUBLIC_MODE", "False").lower() == "true"
+    
+    TESTING = False
     
     @classmethod
     def to_dict(cls) -> Dict[str, Any]:

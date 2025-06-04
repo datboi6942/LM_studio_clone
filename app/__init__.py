@@ -4,6 +4,12 @@ import structlog
 from flask import Flask
 from flask_socketio import SocketIO
 
+try:
+    from flask_cors import CORS
+    HAS_CORS = True
+except ImportError:
+    HAS_CORS = False
+
 from .config import Config
 from .services.logging import setup_logging
 
@@ -33,6 +39,12 @@ def create_app(config_override: dict | None = None) -> Flask:
     # Configure Flask for streaming
     app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 0
     app.config['RESPONSE_TIMEOUT'] = 300  # 5 minutes for long generations
+    
+    # Enable CORS for all routes if available
+    if HAS_CORS:
+        CORS(app, resources={r"/api/*": {"origins": "*"}})
+    else:
+        logger.warning("flask-cors not installed, CORS support disabled")
     
     # Validate configuration
     Config.validate()

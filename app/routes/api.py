@@ -82,7 +82,10 @@ def chat_completions() -> Any:
         
         # Get model
         try:
+            logger.info("=== MODEL ACCESS DEBUG START ===")
+            logger.info("Getting model", model_id=model_id)
             model = current_app.model_registry.get_model(model_id)
+            logger.info("Model retrieved successfully", model=model, is_loaded=model.is_loaded)
         except (KeyError, RuntimeError) as e:
             logger.error("Model not found", model_id=model_id, error=str(e))
             return jsonify({"error": f"Model not found: {model_id}"}), 404
@@ -90,19 +93,40 @@ def chat_completions() -> Any:
         # Load model if needed
         if not model.is_loaded:
             logger.info("Auto-loading model", model_id=model_id)
-            model.load()
+            try:
+                model.load()
+                logger.info("Model loaded successfully", model_id=model_id, is_loaded=model.is_loaded)
+            except Exception as load_error:
+                logger.error("Failed to load model", model_id=model_id, error=str(load_error), exc_info=True)
+                return jsonify({"error": f"Failed to load model: {load_error}"}), 500
+        else:
+            logger.info("Model already loaded", model_id=model_id)
+        
+        logger.info("=== MODEL ACCESS DEBUG END ===")
         
         # Generate response
         if stream:
             def generate() -> Iterator[str]:
                 try:
+                    logger.info("=== ROUTE GENERATE START ===")
+                    logger.info("Starting streaming generation in route", model_id=model_id, messages_count=len(messages))
+                    logger.info("About to call model.chat", model=model, is_loaded=model.is_loaded)
+                    
+                    chunk_count = 0
                     for chunk in model.chat(messages, stream=True, **kwargs):
+                        chunk_count += 1
+                        # Log what we're sending
+                        logger.info(f"Route received chunk #{chunk_count}", chunk=chunk)
                         # Send the chunk immediately with proper SSE format
-                        yield f"data: {json.dumps(chunk)}\n\n"
+                        sse_data = f"data: {json.dumps(chunk)}\n\n"
+                        logger.info(f"Route sending SSE data: {sse_data.strip()}")
+                        yield sse_data
                     # Send a final [DONE] message to indicate completion
+                    logger.info(f"Route stream completed with {chunk_count} chunks")
                     yield "data: [DONE]\n\n"
+                    logger.info("=== ROUTE GENERATE END ===")
                 except Exception as e:
-                    logger.error("Streaming error", error=str(e))
+                    logger.error("Route streaming error", error=str(e), exc_info=True)
                     yield f"data: {json.dumps({'error': str(e)})}\n\n"
             
             response = Response(
@@ -174,4 +198,25 @@ def health_check() -> Any:
             if m.is_loaded
         ]),
         "active_model": current_app.model_registry.active_model
-    }) 
+    })
+
+
+@bp.route("/test/stream", methods=["GET"])
+def test_stream() -> Any:
+    """Test SSE streaming endpoint."""
+    def generate():
+        import time
+        for i in range(5):
+            time.sleep(0.5)
+            yield f"data: {json.dumps({'message': f'Test message {i+1}', 'index': i})}\n\n"
+        yield "data: [DONE]\n\n"
+    
+    return Response(
+        generate(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive"
+        }
+    ) 
