@@ -267,6 +267,7 @@ function chatInterface() {
         ragEnabled: false,
         ragFiles: [],
         eventSource: null,
+        chatId: null,
         
         init() {
             // Load settings from localStorage
@@ -277,6 +278,7 @@ function chatInterface() {
             // Load current chat if specified
             const chatId = new URLSearchParams(window.location.search).get('id');
             if (chatId) {
+                this.chatId = chatId;
                 this.loadChat(chatId);
             }
             
@@ -292,7 +294,15 @@ function chatInterface() {
         
         async sendMessage() {
             if (!this.currentMessage.trim() || this.isStreaming || !this.currentModel) return;
-            
+
+            // Ensure chat exists
+            if (!this.chatId) {
+                const res = await fetch('/chat/create', { method: 'POST' });
+                const data = await res.json();
+                this.chatId = data.chat_id;
+                history.replaceState({}, '', `?id=${this.chatId}`);
+            }
+
             // Add user message
             const userMessage = {
                 role: 'user',
@@ -300,6 +310,11 @@ function chatInterface() {
                 timestamp: new Date()
             };
             this.messages.push(userMessage);
+            fetch(`/api/chat/${this.chatId}/messages`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ role: 'user', content: userMessage.content })
+            });
             
             // Clear input
             const messageText = this.currentMessage;
@@ -412,11 +427,17 @@ function chatInterface() {
                 };
                 
                 await processChunk();
-                
+
                 // If no content was generated, show an error
                 if (!this.messages[messageIndex].content) {
                     this.messages[messageIndex].content = "I apologize, but I couldn't generate a response. Please try again.";
                 }
+
+                fetch(`/api/chat/${this.chatId}/messages`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ role: 'assistant', content: this.messages[messageIndex].content })
+                });
                 
             } catch (error) {
                 console.error('Chat error:', error);
@@ -484,6 +505,7 @@ function chatInterface() {
             try {
                 const response = await fetch(`/api/chat/${chatId}`);
                 const data = await response.json();
+                this.chatId = data.id;
                 this.messages = data.messages;
                 this.chatTitle = data.title;
                 this.ragFiles = data.rag_files || [];
